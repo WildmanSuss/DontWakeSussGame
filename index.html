@@ -415,6 +415,11 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
     /* Restart visibility controlled by JS (touch detection + game state) */
     #restartBtn { display:none; }
 
+
+    @media (pointer:coarse) {
+      .btns { grid-template-columns: 1fr; right:14px; bottom:14px; gap:10px; width:170px; z-index:60; }
+      #doBtn { width:100%; height:64px; font-size:16px; }
+    }
 </style>
   <link rel="icon" href="data:,">
 </head>
@@ -446,6 +451,7 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
     <button class="btn" data-m="right">▶</button>
     <button class="btn" data-m="down">▼</button>
     <button class="btn action" id="doBtn">Do Action</button>
+    <button class="btn util" id="restartBtn">Play Again</button>
   </div>
   <div class="panel hint" id="hint" style="display:none">Loading… Put <b>bedroom_bg.png</b>, <b>bedroom_fg.png</b>, and <b>Jamie.png</b> in the same folder.</div>
 
@@ -995,6 +1001,7 @@ const HINT_COPY = {
   const noiseLabel = document.getElementById('noiseLabel');
   const hint = document.getElementById('hint');
   const doBtn = document.getElementById('doBtn');
+  restartBtn = document.getElementById('restartBtn');
   const restartBtn = document.getElementById('restartBtn');
   const benjiPill = document.getElementById('benjiPill');
 
