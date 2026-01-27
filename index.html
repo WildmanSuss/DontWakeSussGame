@@ -350,12 +350,17 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
 #joyZone{
   display:none;
   position:absolute;
-  left:14px;
-  bottom:18px;
-  width:150px;
-  height:150px;
+  left:16px;
+  bottom:16px;
+  width:170px;
+  height:170px;
+  z-index:60;
   pointer-events:auto;
   touch-action:none;
+}
+
+@media (min-width: 900px) and (pointer: coarse){
+  #joyZone{ width:220px; height:220px; }
 }
 #joyBase{
   position:absolute;
@@ -387,12 +392,31 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
   .btns > .btn[data-m="right"]{ display:none; }
 }
 
+
+/* Mobile-friendly action button placement */
+@media (pointer: coarse){
+  .btns{ position:absolute; right:16px; bottom:16px; display:block; grid-template-columns: none; gap:0; }
+  #doBtn{
+    width:92px;
+    height:92px;
+    border-radius:999px;
+    padding:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:800;
+    line-height:1.05;
+  }
+}
+
 </style>
   <link rel="icon" href="data:,">
 </head>
 <body>
 <div id="wrap" class="uiHidden">
   <canvas id="c"></canvas>
+
+  <div id="joyZone" aria-label="Joystick"><div id="joyBase"><div id="joyStick"></div></div></div>
   <div class="topbar">
     <div class="pill">Quiet Night</div>
     <div class="pill">3:00 AM</div>
@@ -411,8 +435,7 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
     </div>
   </div>
   <div class="btns">
-    <div id="joyZone"><div id="joyBase"><div id="joyStick"></div></div></div>
-    <button class="btn" data-m="up">▲</button>
+<button class="btn" data-m="up">▲</button>
     <button class="btn" data-m="left">◀</button>
     <button class="btn" data-m="right">▶</button>
     <button class="btn" data-m="down">▼</button>
@@ -531,6 +554,145 @@ const HINT_COPY = {
   const UI_CLICK_SRC = "ui_click.wav"; // optional; if missing, it will silently fail
 
   const wrapEl = document.getElementById("wrap");
+
+  // --- Touch joystick state (mobile) ---
+  const joyZoneEl = document.getElementById("joyZone");
+  const joyStickEl = document.getElementById("joyStick");
+
+  // Global joystick state read by movement code
+  const joyState = { active:false, ix:0, iy:0, mag:0 };
+
+  // Joystick config (in px; scaled with CSS sizing)
+  const JOY_MAX = 60;      // max travel for the stick
+  const JOY_DEAD = 6;      // deadzone
+
+  let joyPointerId = null;
+  let joyCenterX = 0, joyCenterY = 0;
+
+  function setJoyVisual(dx, dy){
+    // clamp to max
+    const dist = Math.hypot(dx, dy);
+    const clamped = Math.min(JOY_MAX, dist);
+    const ang = dist > 0 ? Math.atan2(dy, dx) : 0;
+    const cx = clamped * Math.cos(ang);
+    const cy = clamped * Math.sin(ang);
+    if (joyStickEl){
+      joyStickEl.style.transform = `translate(${cx}px, ${cy}px)`;
+    }
+  }
+
+  function resetJoy(){
+    joyState.active = false;
+    joyState.ix = 0; joyState.iy = 0; joyState.mag = 0;
+    joyPointerId = null;
+    setJoyVisual(0,0);
+  }
+
+  function updateJoyFromClientXY(clientX, clientY){
+    const dx = clientX - joyCenterX;
+    const dy = clientY - joyCenterY;
+
+    const dist = Math.hypot(dx, dy);
+    const magRaw = dist / JOY_MAX;
+    const mag = Math.max(0, Math.min(1, magRaw));
+
+    if (dist < JOY_DEAD){
+      joyState.ix = 0; joyState.iy = 0; joyState.mag = 0;
+      setJoyVisual(0,0);
+      return;
+    }
+
+    // Normalized direction, scaled by mag (for analog creep)
+    const nx = dx / (dist || 1);
+    const ny = dy / (dist || 1);
+
+    joyState.ix = nx * mag;
+    joyState.iy = ny * mag;
+    joyState.mag = mag;
+
+    setJoyVisual(dx, dy);
+  }
+
+  function isCoarsePointer(){
+    return window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  }
+
+  function enableJoystickIfNeeded(){
+    if (!joyZoneEl) return;
+    // show/hide handled by CSS, but keep state clean
+    if (!isCoarsePointer()) resetJoy();
+  }
+
+  // Pointer Events (preferred)
+  if (joyZoneEl){
+    joyZoneEl.addEventListener("pointerdown", (e)=>{
+      if (!isCoarsePointer()) return;
+      e.preventDefault();
+      joyPointerId = e.pointerId;
+      joyState.active = true;
+
+      const r = joyZoneEl.getBoundingClientRect();
+      joyCenterX = r.left + r.width/2;
+      joyCenterY = r.top  + r.height/2;
+
+      try{ joyZoneEl.setPointerCapture(joyPointerId); }catch(_e){}
+      updateJoyFromClientXY(e.clientX, e.clientY);
+    }, { passive:false });
+
+    joyZoneEl.addEventListener("pointermove", (e)=>{
+      if (!joyState.active) return;
+      if (joyPointerId !== null && e.pointerId !== joyPointerId) return;
+      e.preventDefault();
+      updateJoyFromClientXY(e.clientX, e.clientY);
+    }, { passive:false });
+
+    joyZoneEl.addEventListener("pointerup", (e)=>{
+      if (joyPointerId !== null && e.pointerId !== joyPointerId) return;
+      e.preventDefault();
+      resetJoy();
+    }, { passive:false });
+
+    joyZoneEl.addEventListener("pointercancel", ()=> resetJoy(), { passive:true });
+    joyZoneEl.addEventListener("lostpointercapture", ()=> resetJoy(), { passive:true });
+  }
+
+  // Touch Events fallback (older Safari edge cases)
+  if (joyZoneEl){
+    joyZoneEl.addEventListener("touchstart", (e)=>{
+      if (!isCoarsePointer()) return;
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      const r = joyZoneEl.getBoundingClientRect();
+      joyCenterX = r.left + r.width/2;
+      joyCenterY = r.top  + r.height/2;
+      joyState.active = true;
+      updateJoyFromClientXY(t.clientX, t.clientY);
+    }, { passive:false });
+
+    joyZoneEl.addEventListener("touchmove", (e)=>{
+      if (!joyState.active) return;
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      updateJoyFromClientXY(t.clientX, t.clientY);
+    }, { passive:false });
+
+    joyZoneEl.addEventListener("touchend", (e)=>{
+      if (!joyState.active) return;
+      e.preventDefault();
+      resetJoy();
+    }, { passive:false });
+
+    joyZoneEl.addEventListener("touchcancel", ()=> resetJoy(), { passive:true });
+  }
+
+  // Prevent page scrolling while interacting with the game on iOS
+  if (wrapEl){
+    wrapEl.addEventListener("touchmove", (e)=>{ e.preventDefault(); }, { passive:false });
+  }
+
+  window.addEventListener("resize", enableJoystickIfNeeded);
+  enableJoystickIfNeeded();
+
   const uiLayer = document.getElementById("uiLayer");
   const startScreenEl = document.getElementById("startScreen");
   const startBgEl = document.getElementById("startBg");
@@ -1302,35 +1464,8 @@ window.addEventListener('keyup', (e) => { keys[e.key] = false; });
 
   const cam = { x:0, y:0 };
   function updateCamera(){
-    const centerX = world.w / 2, centerY = world.h / 2;
-    let dx = (player.x - centerX) * 0.12, dy = (player.y - centerY) * 0.10;
-    dx = Math.max(-CAM_MAX_SHIFT_X, Math.min(CAM_MAX_SHIFT_X, dx));
-    dy = Math.max(-CAM_MAX_SHIFT_Y, Math.min(CAM_MAX_SHIFT_Y, dy));
-    cam.x += (dx - cam.x) * CAM_STRENGTH; cam.y += (dy - cam.y) * CAM_STRENGTH;
-    return { sx: -cam.x, sy: -cam.y };
+    return { sx: 0, sy: 0 };
   }
-
-  function draw(){
-const rect = canvas.getBoundingClientRect();
-const viewW = rect.width, viewH = rect.height;
-
-
-// --- Start screen (canvas fallback) ---
-if (uiScreen === "start") {
-  // Optional: draw start_screen.png behind the HTML UI. If missing, leave as background color.
-  ctx.fillStyle = "#0b1222";
-  ctx.fillRect(0, 0, viewW, viewH);
-  if (typeof startReady !== "undefined" && startReady) {
-    const iw = startImg.naturalWidth || 1536;
-    const ih = startImg.naturalHeight || 1024;
-    const s = Math.max(viewW / iw, viewH / ih);
-    const dw = iw * s, dh = ih * s;
-    const dx = (viewW - dw) / 2;
-    const dy = (viewH - dh) / 2;
-    ctx.drawImage(startImg, dx, dy, dw, dh);
-  }
-  return;
-}
 
 // ----- Moment overlay (teeth / phone) -----
 if (moment && (momentPhase === "hold" || momentPhase === "fadeOut")) {
