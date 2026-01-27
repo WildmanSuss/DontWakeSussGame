@@ -1002,7 +1002,7 @@ const HINT_COPY = {
   const hint = document.getElementById('hint');
   const doBtn = document.getElementById('doBtn');
   restartBtn = document.getElementById('restartBtn');
-  const restartBtn = document.getElementById('restartBtn');
+  restartBtn = document.getElementById('restartBtn');
   const benjiPill = document.getElementById('benjiPill');
 
   // Cached view size (avoid getBoundingClientRect() every frame on mobile)
@@ -1527,7 +1527,7 @@ window.addEventListener('keyup', (e) => { keys[e.key] = false; });
   wrap.addEventListener("touchstart", onWrapContinue, {passive:false});
 
 
-  if (restartBtn) {
+  if (typeof restartBtn !== 'undefined' && restartBtn) {
     const onRestart = (e)=>{ e.preventDefault(); e.stopPropagation(); handleRestartInput(e); };
     restartBtn.addEventListener("click", onRestart);
     restartBtn.addEventListener("pointerdown", onRestart, {passive:false});
