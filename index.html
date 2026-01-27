@@ -14,7 +14,8 @@
     .row { display:flex; align-items:center; gap:10px; }
     .bar { flex:1; height:10px; border-radius:999px; overflow:hidden; background:#1f2a4d; border:1px solid rgba(255,255,255,.12); }
     .bar > i { display:block; height:100%; width:0%; background:linear-gradient(90deg,#57d18d,#ffd166,#ff4d6d); }
-    .btns { position:absolute; right:12px; bottom:90px; display:grid; grid-template-columns: repeat(3, 54px); gap:8px; pointer-events:auto; user-select:none; }
+    .btns { position:absolute; right:12px; bottom:90px; display:grid; grid-template-columns: repeat(3, 54px); gap:8px; pointer-events:auto; user-select:none; z-index:60; }
+    #doBtn{ pointer-events:auto; }
     .btn { width:54px; height:54px; border-radius:12px; border:1px solid rgba(255,255,255,.18); background:rgba(0,0,0,.45); color:#e7eefc; font-size:14px; font-weight:800; touch-action:none; }
     .btn.action { grid-column: 1 / span 3; height:56px; }
     .hint { position:absolute; left:12px; bottom:90px; max-width:min(72%, 640px); pointer-events:none; }
@@ -1476,9 +1477,11 @@ window.addEventListener('keyup', (e) => { keys[e.key] = false; });
     b.addEventListener('pointercancel', up);
     b.addEventListener('pointerleave', up);
   });
-  doBtn.addEventListener('click', tryAction);
+  doBtn.addEventListener('click', (e)=>{ try{ e.stopPropagation(); }catch(_e){} tryAction(); });
   doBtn.addEventListener('pointerdown', (e)=>{ e.preventDefault(); e.stopPropagation(); tryAction(); }, {passive:false});
+  doBtn.addEventListener('pointerup', (e)=>{ e.preventDefault(); e.stopPropagation(); tryAction(); }, {passive:false});
   doBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); tryAction(); }, {passive:false});
+  doBtn.addEventListener('touchend', (e)=>{ e.preventDefault(); e.stopPropagation(); tryAction(); }, {passive:false});
 
   const cam = { x:0, y:0 };
   function updateCamera(){
