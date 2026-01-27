@@ -1112,6 +1112,12 @@ benjiImg.onerror = () => {
   showHint("Could not load benji.png"); 
 };
 benjiImg.src = "benji.png";
+benjiImg._altTried = false;
+benjiImg.onerror = ()=>{
+  if(benjiImg._altTried) return;
+  benjiImg._altTried = true;
+  benjiImg.src = "Benji.png";
+};
 
 const benjiMomentImg = new Image();
 let benjiMomentReady = false;
@@ -1121,6 +1127,12 @@ benjiMomentImg.onerror = () => {
   showHint("Could not load benji_settled.png"); 
 };
 benjiMomentImg.src = "benji_settled.png";
+benjiMomentImg._altTried = false;
+benjiMomentImg.onerror = ()=>{
+  if(benjiMomentImg._altTried) return;
+  benjiMomentImg._altTried = true;
+  benjiMomentImg.src = "Benji_settled.png";
+};
 
   let bgReady = false, fgReady = false, jamieReady = false;
   const world = { w: 1536, h: 1024 };
@@ -1464,6 +1476,8 @@ window.addEventListener('keyup', (e) => { keys[e.key] = false; });
     b.addEventListener('pointerleave', up);
   });
   doBtn.addEventListener('click', tryAction);
+  doBtn.addEventListener('pointerdown', (e)=>{ e.preventDefault(); tryAction(); }, {passive:false});
+  doBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); tryAction(); }, {passive:false});
 
   const cam = { x:0, y:0 };
   function updateCamera(){
