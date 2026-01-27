@@ -1467,6 +1467,8 @@ window.addEventListener('keyup', (e) => { keys[e.key] = false; });
     return { sx: 0, sy: 0 };
   }
 
+  function draw(){
+
 // ----- Moment overlay (teeth / phone) -----
 if (moment && (momentPhase === "hold" || momentPhase === "fadeOut")) {
   let img = null;
