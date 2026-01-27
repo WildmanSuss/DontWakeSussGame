@@ -1157,7 +1157,8 @@ let night = 1; // 1 or 2
 
 // benji spawn / pressure
 let benjiPending = false;    // true after phone moment is dismissed in Night 2
-let benjiKeysLeft = 0;       // counts down from random 3..5 keydowns
+let benjiKeysLeft = 0;       // counts down from random 3..5 keydowns (desktop)
+let benjiAppearAt = 0;       // timestamp when Benji should appear (mobile + fallback)
 let benjiStartTime = 0;      // performance.now() when benji becomes active
 
 const BENJI_RAMP_SECONDS = 12;   // recommendation
@@ -1476,8 +1477,8 @@ window.addEventListener('keyup', (e) => { keys[e.key] = false; });
     b.addEventListener('pointerleave', up);
   });
   doBtn.addEventListener('click', tryAction);
-  doBtn.addEventListener('pointerdown', (e)=>{ e.preventDefault(); tryAction(); }, {passive:false});
-  doBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); tryAction(); }, {passive:false});
+  doBtn.addEventListener('pointerdown', (e)=>{ e.preventDefault(); e.stopPropagation(); tryAction(); }, {passive:false});
+  doBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); tryAction(); }, {passive:false});
 
   const cam = { x:0, y:0 };
   function updateCamera(){
@@ -2061,7 +2062,8 @@ if (moment && momentPhase === "fadeOut") {
       !interact.benji.done
     ) {
       benjiPending = true;
-      benjiKeysLeft = 3 + Math.floor(Math.random() * 3); // 3..5
+      benjiKeysLeft = 3 + Math.floor(Math.random() * 3); // 3..5 (desktop)
+      benjiAppearAt = performance.now() + (1200 + Math.random()*1200); // 1.2–2.4s (touch-friendly)
     }
 
     momentDismissedKind = null;
@@ -2071,6 +2073,15 @@ if (moment && momentPhase === "fadeOut") {
 
 if(gameState === "play" && isGameplayUIActive()){
   
+// --- Benji delayed appearance (Night 2) ---
+  if (gameState === "play" && night === 2 && !moment && benjiPending && benjiAppearAt > 0 && performance.now() >= benjiAppearAt) {
+    benjiPending = false;
+    benjiAppearAt = 0;
+    interact.benji.active = true;
+    benjiStartTime = performance.now();
+    startBenjiWake();
+  }
+
 // --- Benji noise ramp (Night 2) ---
   if (night === 2 && interact.benji && interact.benji.active && !interact.benji.done) {
     const elapsed = Math.max(0, (performance.now() - benjiStartTime) / 1000);
