@@ -410,6 +410,22 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
   }
 }
 
+
+    .btn.util { height:44px; font-size:14px; opacity:0.9; }
+    /* Place Restart above Do Action on touch devices */
+    @media (pointer:coarse) {
+      #restartBtn { display:block; }
+      .btns { grid-template-columns: 1fr; right:14px; bottom:14px; gap:10px; width:170px; }
+      #doBtn { width:100%; height:64px; font-size:16px; }
+      #restartBtn { width:100%; }
+      /* Hide desktop keyboard instruction bar on touch */
+      #kbdHelp { display:none !important; }
+    }
+    /* Hide Restart on desktop (keyboard has R) */
+    @media (pointer:fine) {
+      #restartBtn { display:none; }
+    }
+
 </style>
   <link rel="icon" href="data:,">
 </head>
@@ -990,6 +1006,7 @@ const HINT_COPY = {
   const noiseLabel = document.getElementById('noiseLabel');
   const hint = document.getElementById('hint');
   const doBtn = document.getElementById('doBtn');
+  const restartBtn = document.getElementById('restartBtn');
   const benjiPill = document.getElementById('benjiPill');
 
   // Cached view size (avoid getBoundingClientRect() every frame on mobile)
@@ -1349,32 +1366,26 @@ if (DEBUG_UI) {
     showHint("Restarted. Night 1.");
   }
 
-const keys = {};
-window.addEventListener('keydown', (e) => {
 
-  // Block gameplay controls while not in active play (start screen / modals).
-  // UI buttons handle clicks; ESC is handled separately.
-  if (typeof isGameplayUIActive === "function" && !isGameplayUIActive()) {
-    return;
+function handleContinueInput(e){
+  // Moment dismiss has priority
+  if (momentPhase === "hold") {
+    try { if (e) e.preventDefault(); } catch(_e){}
+    dismissMoment();
+    return true;
   }
 
-
-  // ----- DISMISS MOMENT (takes priority over all other input) -----
-if (momentPhase === "hold") {
-  dismissMoment();
-  return; // stop processing this key
-}
-  // ----- INTERSTITIAL ADVANCE (Night 1 success -> Night 2 intro -> play) -----
+  // Night 1 success -> Night 2 intro
   if (gameState === "night1Success") {
-    e.preventDefault();
+    try { if (e) e.preventDefault(); } catch(_e){}
     gameState = "night2Intro";
-    return;
+    return true;
   }
 
+  // Night 2 intro -> start Night 2
   if (gameState === "night2Intro") {
-    e.preventDefault();
+    try { if (e) e.preventDefault(); } catch(_e){}
 
-    // Start Night 2 fresh
     night = 2;
     gameState = "play";
 
@@ -1390,11 +1401,12 @@ if (momentPhase === "hold") {
     benjiPending = false;
     benjiKeysLeft = 0;
     benjiStartTime = 0;
+    benjiAppearAt = 0;
 
     // Reset moment bookkeeping (safe cleanup)
     momentDismissedKind = null;
 
-    // Reset player position (optional but recommended for “new night” feel)
+    // Reset player position for “new night” feel
     player.x = SPAWN_X;
     player.y = SPAWN_Y;
 
@@ -1403,8 +1415,52 @@ if (momentPhase === "hold") {
     hintTransientUntil = 0;
     hintSuppressedUntil = performance.now() + HINT_INITIAL_DELAY_MS;
 
+    return true;
+  }
+
+  return false;
+}
+
+function handleRestartInput(e){
+  try { if (e) e.preventDefault(); } catch(_e){}
+
+  // If game is finished, go back to title screen
+  if (gameState === "win" || gameState === "lose") {
+    reset();
+
+    // Stop audio loops safely
+    try { stopBenjiWake(); } catch(_e) {}
+    try { stopSnoreLoop(); } catch(_e) {}
+    try { snoreOn = false; } catch(_e) {}
+
+    // Switch UI properly back to Start screen
+    if (typeof setUiOverlay === "function") setUiOverlay(null);
+    if (typeof setUiScreen === "function") setUiScreen("start");
+
+    // If the player hasn't clicked it this session, pulse the "Who is Suss" button
+    if (typeof pulseWhoIsSuss === "function") pulseWhoIsSuss();
+
+    return true;
+  }
+
+  // Mid-game restart
+  reset();
+  return true;
+}
+
+const keys = {};
+window.addEventListener('keydown', (e) => {
+
+  // Block gameplay controls while not in active play (start screen / modals).
+  // UI buttons handle clicks; ESC is handled separately.
+  if (typeof isGameplayUIActive === "function" && !isGameplayUIActive()) {
     return;
   }
+
+
+  // ----- CONTINUE / ADVANCE (moments + interstitials) -----
+  if (handleContinueInput(e)) return;
+
 
 
   // ----- NORMAL INPUT -----
@@ -1434,32 +1490,9 @@ if(e.key.toLowerCase() === "d"){
   showHint(debug ? "Debug ON (hitboxes visible)." : "Debug OFF.");
 }
 
-if (e.key.toLowerCase() === "r") {
-
-  // If game is finished, go back to title screen
-  if (gameState === "win" || gameState === "lose") {
-
-    // Make sure the next run is fresh
-    reset();
-
- // Stop audio loops safely
-    try { stopBenjiWake(); } catch(e) {}
-    try { stopSnoreLoop(); } catch(e) {}
-    try { snoreOn = false; } catch(e) {}
-
-    // Switch UI properly back to Start screen
-    if (typeof setUiOverlay === "function") setUiOverlay(null);
-    if (typeof setUiScreen === "function") setUiScreen("start");
-
-    // If the player hasn't clicked it this session, pulse the "Who is Suss" button
-    pulseWhoIsSuss();
-
-    return;
-  }
-
-  // Mid-game restart = normal reset to starting position
-  reset();
-
+if (e.key && e.key.toLowerCase() === "r") {
+  handleRestartInput(e);
+  return;
 }
 
 
@@ -1482,6 +1515,29 @@ window.addEventListener('keyup', (e) => { keys[e.key] = false; });
   doBtn.addEventListener('pointerup', (e)=>{ e.preventDefault(); e.stopPropagation(); tryAction(); }, {passive:false});
   doBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); tryAction(); }, {passive:false});
   doBtn.addEventListener('touchend', (e)=>{ e.preventDefault(); e.stopPropagation(); tryAction(); }, {passive:false});
+
+
+  const wrap = document.getElementById("wrap");
+  // Tap anywhere to continue (stamps/moments/interstitials) on touch devices
+  const onWrapContinue = (e)=>{
+    // Only consume taps when a continue-able state is active
+    if (momentPhase === "hold" || gameState === "night1Success" || gameState === "night2Intro") {
+      e.preventDefault();
+      e.stopPropagation();
+      handleContinueInput(e);
+    }
+  };
+  wrap.addEventListener("pointerdown", onWrapContinue, {passive:false});
+  wrap.addEventListener("touchstart", onWrapContinue, {passive:false});
+
+
+  if (restartBtn) {
+    const onRestart = (e)=>{ e.preventDefault(); e.stopPropagation(); handleRestartInput(e); };
+    restartBtn.addEventListener("click", onRestart);
+    restartBtn.addEventListener("pointerdown", onRestart, {passive:false});
+    restartBtn.addEventListener("touchstart", onRestart, {passive:false});
+  }
+
 
   const cam = { x:0, y:0 };
   function updateCamera(){
