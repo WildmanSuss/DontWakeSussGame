@@ -993,6 +993,7 @@ const HINT_COPY = {
 
   // Cached view size (avoid getBoundingClientRect() every frame on mobile)
   let viewWCache = 0, viewHCache = 0;
+  let viewW = 0, viewH = 0; // alias used by draw()
 
 
 // Hint state (objective hints vs transient notifications)
@@ -1006,6 +1007,8 @@ let currentObjectiveHintKey = null;
     const rect = canvas.getBoundingClientRect();
     viewWCache = rect.width;
     viewHCache = rect.height;
+    viewW = viewWCache;
+    viewH = viewHCache;
     canvas.width  = Math.round(rect.width * dpr);
     canvas.height = Math.round(rect.height * dpr);
     ctx.setTransform(dpr,0,0,dpr,0,0);
