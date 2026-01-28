@@ -1000,9 +1000,19 @@ const HINT_COPY = {
   const noiseFill = document.getElementById('noiseFill');
   const noiseLabel = document.getElementById('noiseLabel');
   const hint = document.getElementById('hint');
-  const doBtn = document.getElementById('doBtn');
-  restartBtn = document.getElementById('restartBtn');
-  restartBtn = document.getElementById('restartBtn');
+const doBtn = document.getElementById('doBtn');
+restartBtn = document.getElementById('restartBtn');
+
+  function doPlayAgain(e){
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  reset();
+}
+
+if (restartBtn) {
+  restartBtn.addEventListener("click", doPlayAgain);
+  restartBtn.addEventListener("touchstart", doPlayAgain, { passive:false });
+  restartBtn.addEventListener("pointerdown", doPlayAgain, { passive:false });
+}
   const benjiPill = document.getElementById('benjiPill');
 
   // Cached view size (avoid getBoundingClientRect() every frame on mobile)
@@ -2105,8 +2115,23 @@ if (window.__stateLogged !== gameState) {
 console.log("GAME STATE:", gameState, "night:", night);
   window.__stateLogged = gameState;
 }
+// Touch Play Again button visibility (show on win/lose)
+const IS_TOUCH = (("ontouchstart" in window) || (navigator.maxTouchPoints > 0));
+const showPlayAgain = IS_TOUCH && (gameState === "win" || gameState === "lose");
 
+if (showPlayAgain) wrapEl.classList.remove("uiHidden");
 
+if (restartBtn) {
+  restartBtn.style.display = showPlayAgain ? "block" : "none";
+  restartBtn.style.pointerEvents = showPlayAgain ? "auto" : "none";
+  restartBtn.style.opacity = showPlayAgain ? "1" : "0";
+}
+
+if (restartBtn) {
+  restartBtn.style.display = showPlayAgain ? "block" : "none";
+  restartBtn.style.pointerEvents = showPlayAgain ? "auto" : "none";
+  restartBtn.style.opacity = showPlayAgain ? "1" : "0";
+}
 // Handle moment fade-out timing
 if (moment && momentPhase === "fadeOut") {
   momentAlpha = Math.max(0, momentAlpha - dt / 0.25);
