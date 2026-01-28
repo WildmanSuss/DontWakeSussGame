@@ -1,17 +1,12 @@
 <!doctype html>
-<!--
-MOBILE LAYOUT PASS (2026-01-27)
-Changes:
-1) CSS: Added touch-first layout rules under `@media (pointer: coarse)`:
-   - Repositioned `.hud` to top, hid keyboard legend panel on touch.
-   - Moved `.hint` panel to top-center to avoid overlapping controls.
-   - Resized/repositioned `#joyZone` (smaller) and `.btns/#doBtn` with iOS safe-area insets.
-   - Hid desktop key legend text on touch.
-2) CSS: Added small-screen (max-width) overrides for iPhone to further shrink joystick/button.
-Notes:
-- No gameplay mechanics changed; layout-only pass.
+<!-- PATCH NOTES (2026-01-27)
+  - Debug toggle: added runtime 'D' key toggle for existing hitbox/boundary debug rendering (keydown handler).
+  - Night progression: implemented Night 1/2/3 objective gating (tryAction bed gating + startNight/reset).
+  - Benji: gated Benji mechanics/appearance/hints to Night 3 only (moment dismissal + spawn + draw + HUD pill).
+  - Interstitials: replaced 2-screen flow with 4 interstitial screens + 0.8s delayed 'Tap to continue' prompt and input lockout (draw() + handleContinueInput()).
+  - Bed-block messaging: replaced generic messaging with specific objective guidance for Night 2/3 (tryAction()).
+  - Hint system: updated HINT_COPY + objective-hint key computation so Night 1 never mentions teeth/phone/Benji (computeObjectiveHintKey()).
 -->
-
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -366,15 +361,15 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
   position:absolute;
   left:16px;
   bottom:16px;
-  width:170px;
-  height:170px;
+  width: 130px;
+  height: 130px;
   z-index:60;
   pointer-events:auto;
   touch-action:none;
 }
 
 @media (min-width: 900px) and (pointer: coarse){
-  #joyZone{ width:220px; height:220px; }
+  #joyZone{ width: 130px; height: 130px; }
 }
 #joyBase{
   position:absolute;
@@ -434,78 +429,92 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
       #doBtn { width:100%; height:64px; font-size:16px; }
     }
 
+/* --- Forced landscape gate (touch devices) --- */
+#rotateOverlay{
+  position:absolute;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  gap:14px;
+  background:rgba(0,0,0,0.82);
+  z-index:9999;
+  text-align:center;
+  padding:24px;
+}
+#rotateOverlay .card{
+  max-width:520px;
+  background:rgba(10,18,34,0.92);
+  border:1px solid rgba(255,255,255,0.14);
+  border-radius:18px;
+  padding:18px 16px;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.55);
+}
+#rotateOverlay .icon{ font-size:44px; line-height:1; }
+#rotateOverlay .title{ font-weight:900; font-size:18px; margin-bottom:6px; }
+#rotateOverlay .sub{ opacity:0.9; font-size:14px; line-height:1.35; }
 
-/* =========================
-   Mobile Layout Pass (touch)
-   ========================= */
+/* Touch controls: show joystick, hide desktop d-pad arrows */
+@media (pointer: coarse) {
+  #joyZone{ display:block; }
+  .btns > .btn[data-m="up"],
+  .btns > .btn[data-m="down"],
+  .btns > .btn[data-m="left"],
+  .btns > .btn[data-m="right"]{ display:none; }
+}
+
+/* Touch action button placement + sizing */
 @media (pointer: coarse){
-  /* Put HUD at top; remove desktop keyboard legend panel on touch */
-  .hud{
-    inset: 58px 12px auto 12px; /* below topbar */
-    grid-template-columns: 1fr;
-    gap:10px;
-  }
-  .hud .panel:nth-child(2){ display:none; } /* keyboard legend */
-  .hud .panel{ pointer-events:none; }
-
-  /* Move hint/messages to top-center so they never collide with controls */
-  .hint{
-    top: 104px;
-    bottom: auto;
-    left: 50%;
-    transform: translateX(-50%);
-    max-width: min(92vw, 640px);
-  }
-
-  /* Respect iOS safe areas for touch controls */
-  #joyZone{
-    left: calc(12px + env(safe-area-inset-left));
-    bottom: calc(12px + env(safe-area-inset-bottom));
-    width: 130px;
-    height: 130px;
-  }
-  #joyStick{
-    width: 52px;
-    height: 52px;
-    margin-left: -26px;
-    margin-top: -26px;
-  }
-
   .btns{
-    right: calc(12px + env(safe-area-inset-right));
-    bottom: calc(12px + env(safe-area-inset-bottom));
-    width: auto; /* avoid forcing a big column */
-    z-index:60;
-    pointer-events:auto;
+    position:absolute;
+    right:16px;
+    bottom:16px;
+    display:block;
+    grid-template-columns:none;
+    gap:0;
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-right: env(safe-area-inset-right);
   }
   #doBtn{
-    width: 88px;
-    height: 88px;
-    border-radius: 999px;
-    font-size: 16px;
+    width:92px;
+    height:92px;
+    border-radius:999px;
+    padding:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:800;
+    line-height:1.05;
   }
-
-  /* Hide desktop-only micro legends on touch */
-  .hud .kbd, .hud .small{ display:none; }
+  #joyZone{
+    left:16px;
+    bottom:16px;
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+  }
 }
 
-/* iPhone tightening */
-@media (pointer: coarse) and (max-width: 520px){
-  #joyZone{ width: 112px; height: 112px; }
-  #joyStick{
-    width: 46px; height: 46px;
-    margin-left:-23px; margin-top:-23px;
-  }
-  #doBtn{ width: 80px; height: 80px; font-size: 15px; }
-  .hint{ top: 96px; font-size: 13px; }
+/* iPhone: slightly smaller joystick + action button */
+@media (pointer: coarse) and (max-width: 760px){
+  #joyZone{ width:118px; height:118px; }
+  #doBtn{ width:84px; height:84px; }
 }
-
 </style>
   <link rel="icon" href="data:,">
 </head>
 <body>
 <div id="wrap" class="uiHidden">
   <canvas id="c"></canvas>
+  <div id="rotateOverlay" aria-live="polite" aria-label="Rotate device message">
+    <div class="card">
+      <div class="icon">📱↻</div>
+      <div class="title">Rotate to landscape</div>
+      <div class="sub">This game plays best in landscape on iPhone/iPad.<br/>Rotate your device to continue.</div>
+    </div>
+  </div>
+
+
 
   <div id="joyZone" aria-label="Joystick"><div id="joyBase"><div id="joyStick"></div></div></div>
   <div class="topbar">
@@ -632,13 +641,14 @@ const HINT_COOLDOWN_MS = 1000;      // delay after completing an objective befor
 
 // Single place to edit hint copy:
 const HINT_COPY = {
-  n1_teeth: "Brush teeth at the sink.",
-  n1_phone: "Plug in your phone.",
   n1_bed:   "Go to bed.",
-  n2_benji: "Settle Benji.",
   n2_teeth: "Brush teeth at the sink.",
   n2_phone: "Plug in your phone.",
   n2_bed:   "Go to bed.",
+  n3_teeth: "Brush teeth at the sink.",
+  n3_phone: "Plug in your phone.",
+  n3_benji: "Settle Benji.",
+  n3_bed:   "Go to bed.",
 };
 
   // ---------- UI / SCREENS (Start, Instructions, Who is Suss TV) ----------
@@ -718,6 +728,7 @@ const HINT_COPY = {
   // Pointer Events (preferred)
   if (joyZoneEl){
     joyZoneEl.addEventListener("pointerdown", (e)=>{
+      if (typeof rotateGateActive !== "undefined" && rotateGateActive) return;
       if (!isCoarsePointer()) return;
       e.preventDefault();
       joyPointerId = e.pointerId;
@@ -732,6 +743,7 @@ const HINT_COPY = {
     }, { passive:false });
 
     joyZoneEl.addEventListener("pointermove", (e)=>{
+      if (typeof rotateGateActive !== "undefined" && rotateGateActive) return;
       if (!joyState.active) return;
       if (joyPointerId !== null && e.pointerId !== joyPointerId) return;
       e.preventDefault();
@@ -1024,6 +1036,7 @@ const HINT_COPY = {
       gameState = "play";
       // Ensure a clean baseline and start Night 1 fresh
       if (typeof reset === 'function') reset();
+  updateRotateGate();
       // Start audio from gesture, if possible
       if (typeof startSnore === 'function') startSnore();
     } catch(err){
@@ -1085,6 +1098,36 @@ restartBtn = document.getElementById('restartBtn');
   
   const benjiPill = document.getElementById('benjiPill');
 
+
+
+const rotateOverlay = document.getElementById('rotateOverlay');
+let rotateGateActive = false;
+
+function isCoarsePointer(){
+  try { return window.matchMedia && window.matchMedia('(pointer: coarse)').matches; }
+  catch(e){ return false; }
+}
+function isLandscape(){
+  return window.innerWidth >= window.innerHeight;
+}
+function setRotateGate(active){
+  rotateGateActive = active;
+  if (rotateOverlay) rotateOverlay.style.display = active ? 'flex' : 'none';
+  // Cancel active touch joystick drags to prevent stuck movement.
+  if (active && typeof resetJoystick === 'function') resetJoystick();
+  if (active && typeof resetJoy === 'function') resetJoy();
+}
+function updateRotateGate(){
+  const shouldGate = isCoarsePointer() && !isLandscape();
+  if (shouldGate !== rotateGateActive) setRotateGate(shouldGate);
+}
+
+window.addEventListener('resize', () => { setTimeout(updateRotateGate, 0); }, { passive:true });
+window.addEventListener('orientationchange', () => { setTimeout(updateRotateGate, 150); }, { passive:true });
+if (window.visualViewport){
+  window.visualViewport.addEventListener('resize', () => { setTimeout(updateRotateGate, 0); }, { passive:true });
+}
+
   // Cached view size (avoid getBoundingClientRect() every frame on mobile)
   let viewWCache = 0, viewHCache = 0;
   let viewW = 0, viewH = 0; // alias used by draw()
@@ -1126,18 +1169,24 @@ function computeObjectiveHintKey(){
   // Do not show during moment overlays.
   if (moment) return null;
 
+  // Night 1 (tutorial): bed only.
   if (night === 1){
-    if (!interact.sink.done) return "n1_teeth";
-    if (!interact.phone.done) return "n1_phone";
     return "n1_bed";
   }
 
-  // Night 2
+  // Night 2: teeth + phone + bed.
   if (night === 2){
-    if (interact.benji.active && !interact.benji.done) return "n2_benji";
     if (!interact.sink.done) return "n2_teeth";
     if (!interact.phone.done) return "n2_phone";
     return "n2_bed";
+  }
+
+  // Night 3: teeth + phone + (Benji after phone moment) + bed.
+  if (night === 3){
+    if (!interact.sink.done) return "n3_teeth";
+    if (!interact.phone.done) return "n3_phone";
+    if (interact.benji.active && !interact.benji.done) return "n3_benji";
+    return "n3_bed";
   }
 
   return null;
@@ -1197,7 +1246,7 @@ winImg.src = "win.png";
   startImg.src = "start_screen.png";
 
 
-// --- benji (Night 2) assets ---
+// --- benji (Night 3) assets ---
 const benjiImg = new Image();
 let benjiReady = false;
 benjiImg.onload = () => { benjiReady = true; };
@@ -1247,7 +1296,7 @@ benjiMomentImg.onerror = ()=>{
   let debug = false;
   let noise = 0;
   let gameState = "start";
-let night = 1; // 1 or 2
+let night = 1; // 1..3
 
 // benji spawn / pressure
 let benjiPending = false;    // true after phone moment is dismissed in Night 2
@@ -1329,63 +1378,112 @@ if (noise >= 100) {
   }
   function collides(nx, ny){ for(const o of obstacles){ if(rectHitPoint(nx, ny, o)) return true; } return false; }
 
+  function bedBlockMessage(){
+    // Night 1: bed is always allowed (tutorial).
+    if (night === 1) return null;
+
+    // Night 2: teeth + phone required.
+    if (night === 2){
+      if (!interact.sink.done) return "Brush your teeth.";
+      if (!interact.phone.done) return "Plug in your phone.";
+      return null;
+    }
+
+    // Night 3: teeth + phone + Benji required.
+    if (night === 3){
+      if (!interact.sink.done) return "Brush your teeth.";
+      if (!interact.phone.done) return "Plug in your phone.";
+      if (!interact.benji.done) return "Settle Benji.";
+      return null;
+    }
+
+    return null;
+  }
+
   function tryAction(){
+    if (typeof rotateGateActive !== "undefined" && rotateGateActive) return;
     if(gameState !== "play") return;
+
     for(const k of Object.keys(interact)){
       const z = interact[k];
-      // benji exists only in Night 2, and only after he becomes active
+
+      // Benji is only relevant on Night 3, and only after he becomes active
       if (k === "benji") {
-      if (night !== 2) continue;
-      if (!z.active) continue;
-     }
+        if (night !== 3) continue;
+        if (!z.active) continue;
+      }
+
       if(z.done) continue;
+
       if(rectHitPoint(player.x, player.y, z)){
-    z.done = true;
-addNoise(z.noise);
 
-// Objective hint cooldown after completing any objective
-hintSuppressedUntil = performance.now() + HINT_COOLDOWN_MS;
-currentObjectiveHintKey = null;
+        // Night 1 is tutorial: only bed is actionable.
+        if (night === 1 && (k === "sink" || k === "phone")) {
+          showHint("Go to bed.");
+          return;
+        }
 
-// Show moment overlays for specific interactions
-if (k === "sink") { playSuccessSfx("sink"); showMoment("teeth"); return; }
-if (k === "phone") { playSuccessSfx("phone"); showMoment("phone"); return; }
+        // Bed has night-specific gating + win progression.
+        if (k === "bed"){
+          const msg = bedBlockMessage();
+          if (msg){
+            addNoise(4);
+            showHint(msg);
+            return;
+          }
 
-if (k === "benji") {
-  z.done = true;
-  z.active = false;        // Benji disappears immediately
-  playSuccessSfx("benji");
-  // Redraw the frozen background once without Benji before the moment overlay appears.
-  // This prevents Benji from remaining visible behind the overlay due to the moment-draw early return.
-  draw();
-  showMoment("benji");     // shows benji_settled.png
-  return;
-}
+          // Success: complete the night (or the game).
+          z.done = true;
+          addNoise(z.noise || 10);
 
-showHint(z.label);
+          // Objective hint cooldown after completing an objective
+          hintSuppressedUntil = performance.now() + HINT_COOLDOWN_MS;
+          currentObjectiveHintKey = null;
 
-        if(k === "bed"){
-          if(interact.sink.done && interact.phone.done){
-            // Night 2 gating: you cannot go to bed until Benji has been settled.
-            if (night === 2 && !interact.benji.done) {
-              z.done = false;
-              addNoise(4);
-              showHint("Settle Benji before going to bed.");
-              return;
-            }
-            playSuccessSfx("bed");
-            gameState = (night === 1) ? "night1Success" : "win";
+          playSuccessSfx("bed");
+
+          if (night === 1){
+            enterInterstitial("i_post_n1");
+          } else if (night === 2){
+            enterInterstitial("i_post_n2");
+          } else {
+            gameState = "win";
             showHint("Success! R to restart.");
           }
-          else { z.done = false; addNoise(4); showHint("Finish other tasks first."); }
+          return;
         }
+
+        // Normal interactions (sink/phone/benji)
+        z.done = true;
+        addNoise(z.noise);
+
+        // Objective hint cooldown after completing any objective
+        hintSuppressedUntil = performance.now() + HINT_COOLDOWN_MS;
+        currentObjectiveHintKey = null;
+
+        // Show moment overlays for specific interactions
+        if (k === "sink") { playSuccessSfx("sink"); showMoment("teeth"); return; }
+        if (k === "phone") { playSuccessSfx("phone"); showMoment("phone"); return; }
+
+        if (k === "benji") {
+          z.done = true;
+          z.active = false;        // Benji disappears immediately
+          playSuccessSfx("benji");
+          // Redraw the frozen background once without Benji before the moment overlay appears.
+          // This prevents Benji from remaining visible behind the overlay due to the moment-draw early return.
+          draw();
+          showMoment("benji");     // shows benji_settled.png
+          return;
+        }
+
+        showHint(z.label);
         return;
       }
     }
     showHint("Nothing to do here.");
   }
 
-  function reset(){
+function reset(){
     // Full reset back to Night 1 baseline
     gameState = "play";
     night = 1;
@@ -1443,6 +1541,78 @@ if (DEBUG_UI) {
   }
 
 
+
+// ----- Interstitial helpers (4 screens + delayed prompt) -----
+
+function startNight(n){
+  night = n;
+  gameState = "play";
+
+  // Reset tasks + noise
+  setNoise(0);
+  stopBenjiWake();
+  for (const k of Object.keys(interact)) {
+    interact[k].done = false;
+    if (k === "benji") interact[k].active = false; // Benji only becomes active later (Night 3)
+  }
+
+  // Reset Benji timing state
+  benjiPending = false;
+  benjiKeysLeft = 0;
+  benjiStartTime = 0;
+  benjiAppearAt = 0;
+
+  // Reset moment bookkeeping (safe cleanup)
+  momentDismissedKind = null;
+
+  // Reset player position for “new night” feel
+  player.x = SPAWN_X;
+  player.y = SPAWN_Y;
+
+  // Objective hint timing
+  currentObjectiveHintKey = null;
+  hintTransientUntil = 0;
+  hintSuppressedUntil = performance.now() + HINT_INITIAL_DELAY_MS;
+}
+
+// ----- Interstitial helpers (4 screens + delayed prompt) -----
+const INTERSTITIAL_PROMPT_DELAY_MS = 800;
+let interstitialShownAt = 0;
+
+function enterInterstitial(state){
+  gameState = state;
+  interstitialShownAt = performance.now();
+}
+
+function interstitialCanAdvance(){
+  return (performance.now() - interstitialShownAt) >= INTERSTITIAL_PROMPT_DELAY_MS;
+}
+
+function drawInterstitial(title, bodyLines, canAdvance){
+  ctx.fillStyle = "#001018";
+  ctx.fillRect(0, 0, viewW, viewH);
+
+  ctx.fillStyle = "#e7eefc";
+  ctx.textAlign = "center";
+
+  ctx.font = "900 44px system-ui";
+  ctx.fillText(title, viewW / 2, viewH / 2 - 60);
+
+  ctx.font = "800 20px system-ui";
+  const lineH = 26;
+  const startY = viewH / 2 - 10;
+  bodyLines.forEach((line, i) => {
+    ctx.fillText(line, viewW / 2, startY + i * lineH);
+  });
+
+  if (canAdvance){
+    ctx.font = "900 18px system-ui";
+    ctx.fillText("Tap to continue", viewW / 2, viewH / 2 + 90);
+  }
+
+  ctx.textAlign = "left";
+}
+
 function handleContinueInput(e){
   // Moment dismiss has priority
   if (momentPhase === "hold") {
@@ -1451,47 +1621,15 @@ function handleContinueInput(e){
     return true;
   }
 
-  // Night 1 success -> Night 2 intro
-  if (gameState === "night1Success") {
+  // Interstitials: ignore input until the 0.8s delay has elapsed
+  if (gameState === "i_post_n1" || gameState === "i_pre_n2" || gameState === "i_post_n2" || gameState === "i_pre_n3") {
     try { if (e) e.preventDefault(); } catch(_e){}
-    gameState = "night2Intro";
-    return true;
-  }
+    if (!interstitialCanAdvance()) return true;
 
-  // Night 2 intro -> start Night 2
-  if (gameState === "night2Intro") {
-    try { if (e) e.preventDefault(); } catch(_e){}
-
-    night = 2;
-    gameState = "play";
-
-    // Reset tasks + noise
-    setNoise(0);
-    stopBenjiWake();
-    for (const k of Object.keys(interact)) {
-      interact[k].done = false;
-      if (k === "benji") interact[k].active = false; // Benji only becomes active later
-    }
-
-    // Reset Benji timing state
-    benjiPending = false;
-    benjiKeysLeft = 0;
-    benjiStartTime = 0;
-    benjiAppearAt = 0;
-
-    // Reset moment bookkeeping (safe cleanup)
-    momentDismissedKind = null;
-
-    // Reset player position for “new night” feel
-    player.x = SPAWN_X;
-    player.y = SPAWN_Y;
-
-    // Objective hint timing
-    currentObjectiveHintKey = null;
-    hintTransientUntil = 0;
-    hintSuppressedUntil = performance.now() + HINT_INITIAL_DELAY_MS;
-
-    return true;
+    if (gameState === "i_post_n1") { enterInterstitial("i_pre_n2"); return true; }
+    if (gameState === "i_pre_n2")  { startNight(2); return true; }
+    if (gameState === "i_post_n2") { enterInterstitial("i_pre_n3"); return true; }
+    if (gameState === "i_pre_n3")  { startNight(3); return true; }
   }
 
   return false;
@@ -1530,6 +1668,21 @@ function handleRestartInput(e){
 
 const keys = {};
 window.addEventListener('keydown', (e) => {
+  if (typeof rotateGateActive !== 'undefined' && rotateGateActive) return;
+  // Dev-only debug toggle (hitboxes/bounds). Debug is OFF by default.
+  if (e.key === "d" || e.key === "D") {
+    debug = !debug;
+    if (DEBUG_TOAST) {
+      const t = document.getElementById("debugToast");
+      if (t) {
+        t.style.display = "block";
+        t.textContent = debug ? "DEBUG: ON" : "DEBUG: OFF";
+        setTimeout(()=>{ try{ t.style.display = "none"; }catch(_e){} }, 900);
+      }
+    }
+    return;
+  }
+
 
   // Block gameplay controls while not in active play (start screen / modals).
   // UI buttons handle clicks; ESC is handled separately.
@@ -1545,8 +1698,8 @@ window.addEventListener('keydown', (e) => {
 
   // ----- NORMAL INPUT -----
   keys[e.key] = true;
-// Night 2: after phone is dismissed, benji appears after 3–5 keydowns (any key)
-if (gameState === "play" && night === 2 && !moment && benjiPending && benjiKeysLeft > 0) {
+// Night 3: after phone is dismissed, Benji appears after 3–5 keydowns (any key)
+if (gameState === "play" && night === 3 && !moment && benjiPending && benjiKeysLeft > 0) {
   benjiKeysLeft--;
   if (benjiKeysLeft <= 0) {
     benjiPending = false;
@@ -1611,7 +1764,7 @@ const onWrapContinue = (e) => {
   }
 
   // Moments / interstitial screens
-  if (momentPhase === "hold" || gameState === "night1Success" || gameState === "night2Intro") {
+  if (momentPhase === "hold" || gameState === "i_post_n1" || gameState === "i_pre_n2" || gameState === "i_post_n2" || gameState === "i_pre_n3") {
     e.preventDefault();
     e.stopPropagation();
     handleContinueInput(e);
@@ -1676,38 +1829,44 @@ if (moment && (momentPhase === "hold" || momentPhase === "fadeOut")) {
   return; // stop normal drawing while moment is up
 }
 
-// --- Night interstitial screens ---
-if (gameState === "night1Success") {
-  ctx.fillStyle = "#001018";
-  ctx.fillRect(0, 0, viewW, viewH);
-
-  ctx.fillStyle = "#e7eefc";
-  ctx.textAlign = "center";
-  ctx.font = "900 40px system-ui";
-  ctx.fillText("Night 1: Success!", viewW / 2, viewH / 2 - 10);
-
-  ctx.font = "800 18px system-ui";
-  ctx.fillText("Press any key for Night 2", viewW / 2, viewH / 2 + 28);
-  ctx.textAlign = "left";
+// --- Night interstitial screens (4 screens + delayed prompt) ---
+if (gameState === "i_post_n1") {
+  drawInterstitial(
+    "Night 1: Success!",
+    ["But you woke up with bad breath", "and a dead phone."],
+    interstitialCanAdvance()
+  );
   return;
 }
 
-if (gameState === "night2Intro") {
-  ctx.fillStyle = "#001018";
-  ctx.fillRect(0, 0, viewW, viewH);
-
-  ctx.fillStyle = "#e7eefc";
-  ctx.textAlign = "center";
-  ctx.font = "900 48px system-ui";
-  ctx.fillText("Night 2", viewW / 2, viewH / 2);
-
-  ctx.font = "800 18px system-ui";
-  ctx.fillText("Press any key to begin", viewW / 2, viewH / 2 + 36);
-  ctx.textAlign = "left";
+if (gameState === "i_pre_n2") {
+  drawInterstitial(
+    "Night 2",
+    ["Brush your teeth and", "charge your phone before bed."],
+    interstitialCanAdvance()
+  );
   return;
 }
 
-    ctx.clearRect(0, 0, viewW, viewH);
+if (gameState === "i_post_n2") {
+  drawInterstitial(
+    "Night 2: Success!",
+    ["Now you’ve got it."],
+    interstitialCanAdvance()
+  );
+  return;
+}
+
+if (gameState === "i_pre_n3") {
+  drawInterstitial(
+    "Night 3",
+    ["What could go wrong?"],
+    interstitialCanAdvance()
+  );
+  return;
+}
+
+ctx.clearRect(0, 0, viewW, viewH);
 if (gameState === "lose") {
   if (failReady) {
     // Cover scaling: fill screen, crop if needed
@@ -1791,9 +1950,9 @@ else oy = Math.max(minOy, Math.min(maxOy, oy));
    
     if(bgReady){ ctx.drawImage(bg, ox, oy, world.w * scale, world.h * scale); }
 
-// --- Benji (Night 2) in-world sprite ---
+// --- Benji (Night 3) in-world sprite ---
 if (
-  night === 2 &&
+  night === 3 &&
   interact.benji &&
   interact.benji.active &&
   !interact.benji.done &&
@@ -2232,10 +2391,10 @@ if (moment && momentPhase === "fadeOut") {
     moment = null;
     momentPhase = "off";
 
-    // If we just dismissed the phone moment during Night 2,
+    // If we just dismissed the phone moment during Night 3,
     // begin benji's delayed appearance
     if (
-      night === 2 &&
+      night === 3 &&
       momentDismissedKind === "phone" &&
       interact.phone.done &&
       !interact.benji.done
@@ -2252,8 +2411,8 @@ if (moment && momentPhase === "fadeOut") {
 
 if(gameState === "play" && isGameplayUIActive()){
   
-// --- Benji delayed appearance (Night 2) ---
-  if (gameState === "play" && night === 2 && !moment && benjiPending && benjiAppearAt > 0 && performance.now() >= benjiAppearAt) {
+// --- Benji delayed appearance (Night 3) ---
+  if (gameState === "play" && night === 3 && !moment && benjiPending && benjiAppearAt > 0 && performance.now() >= benjiAppearAt) {
     benjiPending = false;
     benjiAppearAt = 0;
     interact.benji.active = true;
@@ -2261,8 +2420,8 @@ if(gameState === "play" && isGameplayUIActive()){
     startBenjiWake();
   }
 
-// --- Benji noise ramp (Night 2) ---
-  if (night === 2 && interact.benji && interact.benji.active && !interact.benji.done) {
+// --- Benji noise ramp (Night 3) ---
+  if (night === 3 && interact.benji && interact.benji.active && !interact.benji.done) {
     const elapsed = Math.max(0, (performance.now() - benjiStartTime) / 1000);
     const p = Math.min(1, elapsed / BENJI_RAMP_SECONDS);
     const ratePerSec = BENJI_MAX_NOISE_PER_SEC * (p * p);
@@ -2394,7 +2553,7 @@ if(gameState === "play" && isGameplayUIActive()){
 // --- Benji HUD pill (Night 2 only) ---
 if (benjiPill) {
   benjiPill.style.display =
-    (night === 2 &&
+    (night === 3 &&
      interact.benji &&
      interact.benji.active &&
      !interact.benji.done)
