@@ -1,0 +1,2789 @@
+<!-- UI-ONLY LAYOUT PATCH (2026-01-27)
+  Touch + landscape only:
+  - CSS override: #joyZone size -> 80px x 80px (smaller joystick base)
+  - CSS override: #joyStick size -> 28px x 28px (smaller joystick stick; updated centering margins)
+  - CSS override: .hint top -> 54px (moved slightly higher; centered unchanged)
+  Start screen:
+  - Joystick hidden on start screen via existing .uiHidden #joyZone rule (no logic changes)
+-->
+<!doctype html>
+<!-- PATCH NOTES (2026-01-27)
+  - Debug toggle: added runtime 'D' key toggle for existing hitbox/boundary debug rendering (keydown handler).
+  - Night progression: implemented Night 1/2/3 objective gating (tryAction bed gating + startNight/reset).
+  - Benji: gated Benji mechanics/appearance/hints to Night 3 only (moment dismissal + spawn + draw + HUD pill).
+  - Interstitials: replaced 2-screen flow with 4 interstitial screens + 0.8s delayed 'Tap to continue' prompt and input lockout (draw() + handleContinueInput()).
+  - Bed-block messaging: replaced generic messaging with specific objective guidance for Night 2/3 (tryAction()).
+  - Hint system: updated HINT_COPY + objective-hint key computation so Night 1 never mentions teeth/phone/Benji (computeObjectiveHintKey()).
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Quiet Night — v1 (Layered Art) — refactor 2026-01-23</title>
+  <style>
+    html, body { margin:0; padding:0; height:100%; background:#0b1222; color:#e7eefc; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    #wrap { position:relative; width:100%; height:100%; overflow:hidden; }
+    canvas { display:block; width:100%; height:100%; }
+    .hud { position:absolute; inset:auto 12px 12px 12px; display:grid; grid-template-columns: 1fr auto; gap:10px; align-items:center; pointer-events:none; }
+    .panel { background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.12); border-radius:14px; padding:10px 12px;
+      box-shadow: 0 12px 30px rgba(0,0,0,.4); backdrop-filter: blur(8px); }
+    .row { display:flex; align-items:center; gap:10px; }
+    .bar { flex:1; height:10px; border-radius:999px; overflow:hidden; background:#1f2a4d; border:1px solid rgba(255,255,255,.12); }
+    .bar > i { display:block; height:100%; width:0%; background:linear-gradient(90deg,#57d18d,#ffd166,#ff4d6d); }
+    .btns { position:absolute; right:12px; bottom:90px; display:grid; grid-template-columns: repeat(3, 54px); gap:8px; pointer-events:auto; user-select:none; z-index:60; }
+    #doBtn{ pointer-events:auto; }
+    .btn { width:54px; height:54px; border-radius:12px; border:1px solid rgba(255,255,255,.18); background:rgba(0,0,0,.45); color:#e7eefc; font-size:14px; font-weight:800; touch-action:none; }
+    .btn.action { grid-column: 1 / span 3; height:56px; }
+    .hint { position:absolute; left:12px; bottom:90px; max-width:min(72%, 640px); pointer-events:none; }
+    .topbar { position:absolute; top:12px; left:12px; right:12px; display:flex; justify-content:space-between; gap:10px; pointer-events:none; }
+    .pill { background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.12); border-radius:999px; padding:8px 12px; font-weight:850; }
+    .small { font-size:12.5px; color:#9fb2d9; font-weight:750; }
+    .kbd { padding:2px 7px; border-radius:8px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.08); font-weight:900; }
+
+    /* ---------- START SCREEN + MODALS ---------- */
+    .hidden { display:none !important; }
+    .uiLayer { position:absolute; inset:0; pointer-events:auto; z-index:50; }
+/* Start screen */
+    #startScreen {
+      position:absolute; inset:0;
+      z-index: 80;
+      display:flex; align-items:center; justify-content:center;
+      pointer-events:auto;
+    }
+    #startScreen .startBg { pointer-events:none;
+position:absolute; inset:0;
+      background: #0b1222;
+      background-size: cover;
+      background-position: center;
+      filter: none;
+    }
+    #startScreen .startShade { pointer-events:none;
+position:absolute; inset:0;
+      background: linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.24));
+    }
+    #startScreen .startUI { z-index:2;
+
+      position:relative;
+      width:min(760px, calc(100vw - 28px));
+      margin-top: 4vh;
+      display:flex; flex-direction:column; align-items:center; gap:10px;
+      pointer-events:auto;
+    }
+    #startScreen .startBtn {
+      width: min(420px, 68vw);
+      height: 74px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(120, 210, 140, 0.90);
+      color: rgba(255,255,255,0.96);
+      font-size: 34px;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      box-shadow: 0 18px 45px rgba(0,0,0,0.40), 0 0 0 1px rgba(255,255,255,0.16) inset;
+      cursor: pointer;
+    }
+    #startScreen .startBtn:active { transform: scale(0.995); }
+    #startScreen .microLink {
+      border:0; background:none; padding:0;
+      font-size: 16px;
+      color: rgba(231,238,252,0.72);
+      cursor: pointer;
+    }
+    #startScreen .microLink:hover { color: rgba(231,238,252,0.92); text-decoration: underline; text-decoration-color: rgba(231,238,252,0.55); }
+    
+    #startScreen #whoIsSuss {
+      position:absolute;
+      right: 18px;
+      bottom: 14px;
+      border:0;
+      background:none;
+      padding: 10px 14px;
+      font-size: 26px;
+      font-weight: 700;
+      color: rgba(231,238,252,0.26);
+      letter-spacing: 0.2px;
+      cursor: pointer;
+      z-index: 120;
+      pointer-events: auto;
+    }
+
+
+    #startScreen #whoIsSuss:hover, #startScreen #whoIsSuss:focus {
+      color: rgba(231,238,252,0.70);
+      text-decoration: underline;
+      text-decoration-color: rgba(231,238,252,0.45);
+    }
+
+    /* Instruction overlay */
+    .modal {
+      position:fixed; inset:0;
+      z-index: 200;
+      display:flex; align-items:center; justify-content:center;
+      pointer-events:auto;
+    }
+    .modal .backdrop {
+      position:absolute; inset:0;
+      background: rgba(10, 12, 20, 0.56);
+      backdrop-filter: blur(3px);
+    }
+    .modal .panelCard {
+      position:relative;
+      width: min(760px, calc(100vw - 28px));
+      background: rgba(0,0,0,.45);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 18px;
+      padding: 16px 16px calc(14px + env(safe-area-inset-bottom));
+      box-shadow: 0 18px 60px rgba(0,0,0,.52);
+      backdrop-filter: blur(8px);
+      pointer-events:auto;
+    }
+    .modal .titleRow{
+      display:flex; align-items:baseline; justify-content:space-between; gap:12px;
+      padding: 2px 4px 10px;
+    }
+    .modal .kicker{
+      font-size: 14px;
+      font-weight: 900;
+      letter-spacing: 0.2px;
+      color: rgba(231,238,252,0.92);
+    }
+    .modal .closeX{
+      width: 36px; height: 36px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.08);
+      color: rgba(231,238,252,0.85);
+      font-size: 20px;
+      cursor:pointer;
+    }
+    .modal .closeX:hover { background: rgba(255,255,255,0.13); }
+    .modal .bullets{
+      margin: 0;
+      padding-left: 18px;
+      color: rgba(231,238,252,0.90);
+      font-weight: 700;
+      line-height: 1.55;
+    }
+    .modal .bullets li { margin: 6px 0; }
+    .modal .controlsRow{
+      display:flex; gap:14px; flex-wrap:wrap;
+      margin-top: 12px;
+      padding: 10px 10px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.06);
+      color: rgba(231,238,252,0.90);
+      font-weight: 800;
+    }
+    .modal .ctaRow{
+      display:flex; justify-content:center;
+      margin-top: 12px;
+    }
+    .modal .ctaBtn{
+      border:0;
+      padding: 10px 16px;
+      border-radius: 14px;
+      background: rgba(120, 210, 140, 0.86);
+      color: rgba(255,255,255,0.96);
+      font-size: 15px;
+      font-weight: 900;
+      cursor:pointer;
+      box-shadow: 0 12px 26px rgba(0,0,0,0.38), 0 0 0 1px rgba(255,255,255,0.16) inset;
+    }
+    .modal .ctaBtn:hover { filter: brightness(1.04); }
+
+    /* TV overlay */
+    #tvModal .tvWrap {
+      position:relative;
+      z-index: 1;
+      width: min(980px, calc(100vw - 28px));
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      /* Safeguard so the wrap has box-size before the frame image finishes loading */
+      aspect-ratio: 16 / 9;
+    }
+    #tvModal .tvWrap{ max-height: 70vh; }
+    #tvModal img#tvFrame {
+      display:block;
+      position:relative;
+      width:100%;
+      height:auto;
+      object-fit: contain;
+      pointer-events:none;
+      user-select:none;
+    }
+    /* Screen region (tuned via CSS variables) */
+#tvModal .tvScreen {
+  /* shifted right + smaller */
+  --sx: 30%;   /* was 18% → move right */
+  --sy: 20%;
+  --sw: 40.8%;   /* was 64% → ~20% smaller */
+  --sh: 36.8%;   /* was 58% → ~20% smaller */
+
+  position:absolute;
+  left: var(--sx);
+  top: var(--sy);
+  width: var(--sw);
+  height: var(--sh);
+  border-radius: 10px;
+  overflow:hidden;
+  background: rgba(5, 8, 14, 0.88);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.10) inset, 0 14px 26px rgba(0,0,0,0.35);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+    #tvModal .tvScreen video{
+      width:92%; height:92%;
+      object-fit: contain;
+      display:none;
+      background:#000;
+    }
+    #tvModal .tvIdle {
+      width:100%; height:100%;
+      display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      gap:10px;
+      cursor:pointer;
+      color: rgba(231,238,252,0.92);
+      text-align:center;
+      padding: 12px;
+    }
+    #tvModal .tvIdle .idleTitle{
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: 0.2px;
+      color: rgba(231,238,252,0.92);
+    }
+    #tvModal .tvIdle .playIcon{
+      width: 70px; height: 70px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(255,255,255,0.08);
+      display:flex; align-items:center; justify-content:center;
+      box-shadow: 0 10px 22px rgba(0,0,0,0.35);
+    }
+    #tvModal .tvIdle .playIcon:before{
+      content:"";
+      display:block;
+      width: 0; height: 0;
+      border-top: 13px solid transparent;
+      border-bottom: 13px solid transparent;
+      border-left: 20px solid rgba(231,238,252,0.86);
+      margin-left: 4px;
+    }
+    #tvModal .tvFooter {
+      margin-top: 12px;
+      display:flex;
+      justify-content:center;
+      pointer-events:auto;
+          padding-bottom: env(safe-area-inset-bottom);
+      position: relative;
+      z-index: 5;
+    }
+
+
+    /* Instructions image mode */
+    #howToModal .panelCard { padding: 12px; }
+    #howToModal .titleRow { padding-bottom: 8px; }
+    #howToModal .howToImgWrap{
+      position: relative;
+      width: 100%;
+      border-radius: 14px;
+      overflow: hidden;
+      background: rgba(0,0,0,0.20);
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.06) inset;
+    }
+    #howToModal img#howToImg{
+      display:block;
+      width:100%;
+      height:auto;
+      max-height: 70vh;
+      object-fit: contain;
+      user-select:none;
+      pointer-events:none;
+    }
+    /* Adjust these if your image layout differs */
+    #howToModal button#howToImgGotIt{
+      position:absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 6%;
+      width: 32%;
+      height: 12%;
+      border: 0;
+      background: rgba(255,255,255,0.001); /* clickable but invisible */
+      cursor: pointer;
+    }
+
+
+    /* Debug toast (temporary) */
+    #debugToast{
+      position: fixed;
+      left: 50%;
+      top: 18px;
+      transform: translateX(-50%);
+      padding: 10px 14px;
+      border-radius: 14px;
+      background: rgba(0,0,0,0.75);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(231,238,252,0.95);
+      font-weight: 900;
+      z-index: 2147483647;
+    }
+
+    /* Force TV modal above everything */
+    #tvModal{
+      position: fixed !important;
+      inset: 0 !important;
+      z-index: 2147483000 !important;
+      display: none;
+    }
+    #tvModal:not(.hidden){ display:flex !important; }
+
+    /* Hide gameplay HUD/buttons while in start/modals */
+    .uiHidden .hud,
+    .uiHidden .btns,
+    .uiHidden .topbar { display:none !important; }
+
+  
+@keyframes softFlash {
+  0%   { opacity: 1; }
+  50%  { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+
+.attention-pulse {
+  animation: softFlash 1.6s ease-in-out infinite;
+}
+
+
+  
+/* --- Mobile hardening + joystick --- */
+html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:none; user-select:none; }
+#wrap, #c { touch-action: none; }
+
+#joyZone{
+  display:none;
+  position:absolute;
+  left:16px;
+  bottom:16px;
+  width: 90px;
+  height: 90px;
+  left: calc(12px + env(safe-area-inset-left));
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  z-index:60;
+  pointer-events:auto;
+  touch-action:none;
+}
+
+@media (min-width: 900px) and (pointer: coarse){
+  #joyZone{ width: 96px; height: 96px; }
+}
+@media (max-width: 520px) and (pointer: coarse){
+  #joyZone{ width: 78px; height: 78px; }
+}
+#joyBase{
+  position:absolute;
+  inset:0;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.18);
+  background: rgba(0,0,0,0.25);
+  backdrop-filter: blur(6px);
+}
+#joyStick{
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:64px;
+  height:64px;
+  margin-left:-32px;
+  margin-top:-32px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.10);
+}
+
+@media (pointer: coarse){
+  #joyStick{ width:38px; height:38px; margin-left:-19px; margin-top:-19px; }
+}
+
+/* Prefer joystick + fewer tiny buttons on touch devices */
+@media (pointer: coarse) {
+  #joyZone{ display:block; }
+  .hud .panel:nth-child(2){ display:none !important; }
+  .hud .panel.row .small{ display:none !important; }
+  .btns > .btn[data-m="up"],
+  .btns > .btn[data-m="down"],
+  .btns > .btn[data-m="left"],
+  .btns > .btn[data-m="right"]{ display:none; }
+}
+/* Touch landscape layout improvements (2026-01-27 fix4)
+   - Start screen background: use contain to avoid over-zoom on iPhone landscape
+   - Move Noise + hint UI to top in landscape on touch
+   - Further reduce joystick size for small screens
+*/
+@media (pointer: coarse) {
+  #startScreen .startBg{ background-size: contain; background-repeat:no-repeat; }
+}
+@media (pointer: coarse) and (orientation: landscape) {
+  /* Move Noise meter to top (below the top pills) */
+  .hud{
+    top: 62px;
+    left: 12px;
+    right: 12px;
+    bottom: auto;
+    grid-template-columns: 1fr;
+  }
+  /* Move hint/messages to top center */
+  .hint{
+    top: 124px;
+    bottom: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: min(92%, 760px);
+    text-align: center;
+  }
+}
+
+
+
+/* Mobile-friendly action button placement */
+@media (pointer: coarse){
+  .btns{ position:absolute; right:16px; bottom:16px; display:block; grid-template-columns: none; gap:0; }
+  #doBtn{
+    width:92px;
+    height:92px;
+    border-radius:999px;
+    padding:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:800;
+    line-height:1.05;
+  }
+}
+
+
+    .btn.util { height:44px; font-size:14px; opacity:0.9; }
+    /* Restart visibility controlled by JS (touch detection + game state) */
+    #restartBtn { display:none; }
+
+
+    @media (pointer:coarse) {
+      .btns { grid-template-columns: 1fr; right:14px; bottom:14px; gap:10px; width:170px; z-index:60; }
+      #doBtn { width:100%; height:64px; font-size:16px; }
+    }
+
+/* --- Forced landscape gate (touch devices) --- */
+#rotateOverlay{
+  position:absolute;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  gap:14px;
+  background:rgba(0,0,0,0.82);
+  z-index:9999;
+  text-align:center;
+  padding:24px;
+}
+#rotateOverlay .card{
+  max-width:520px;
+  background:rgba(10,18,34,0.92);
+  border:1px solid rgba(255,255,255,0.14);
+  border-radius:18px;
+  padding:18px 16px;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.55);
+}
+#rotateOverlay .icon{ font-size:44px; line-height:1; }
+#rotateOverlay .title{ font-weight:900; font-size:18px; margin-bottom:6px; }
+#rotateOverlay .sub{ opacity:0.9; font-size:14px; line-height:1.35; }
+
+/* Touch end screens: hide touch controls + HUD to avoid clutter over win/lose art */
+body.endScreen #joyZone,
+body.endScreen #doBtn,
+body.endScreen .hud{ display:none !important; }
+
+/* Always hide the Play Again button (tap/click anywhere returns to menu) */
+#restartBtn{ display:none !important; }
+
+/* Touch controls: show joystick, hide desktop d-pad arrows */
+@media (pointer: coarse) {
+  #joyZone{ display:block; }
+  .btns > .btn[data-m="up"],
+  .btns > .btn[data-m="down"],
+  .btns > .btn[data-m="left"],
+  .btns > .btn[data-m="right"]{ display:none; }
+}
+
+/* Touch action button placement + sizing */
+@media (pointer: coarse){
+  .btns{
+    position:absolute;
+    right:16px;
+    bottom:16px;
+    display:block;
+    grid-template-columns:none;
+    gap:0;
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-right: env(safe-area-inset-right);
+  }
+  #doBtn{
+    width:92px;
+    height:92px;
+    border-radius:999px;
+    padding:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:800;
+    line-height:1.05;
+  }
+  #joyZone{
+    left:16px;
+    bottom:16px;
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+  }
+}
+
+/* iPhone: slightly smaller joystick + action button */
+@media (pointer: coarse) and (max-width: 760px){
+  #joyZone{ width:118px; height:118px; }
+  #doBtn{ width:84px; height:84px; }
+}
+/* --- Mobile layout polish (2026-01-27 fix5)
+   - Hide joystick on start screen (wrap.uiHidden)
+   - Move Noise meter into topbar between pills (landscape touch)
+   - Center hints under Noise meter (landscape touch)
+   - Push Action button further right (closer to edge)
+*/
+.uiHidden #joyZone{ display:none !important; }
+
+@media (pointer: coarse){
+  /* push action button further to the right edge (respect safe area) */
+  .btns{
+    right: calc(6px + env(safe-area-inset-right));
+    padding-right: 0;
+  }
+}
+
+/* Noise bar between the two pills (touch landscape) */
+@media (pointer: coarse) and (orientation: landscape){
+  /* After JS moves the Noise panel into .topbar, style it as the middle element */
+  .topbar .noiseMid{
+    flex: 1;
+    max-width: min(560px, 55vw);
+    display:flex;
+    align-items:center;
+    gap:10px;
+    pointer-events:none;
+  }
+  .topbar .noiseMid strong{ min-width:58px; }
+  .topbar .noiseMid .bar{ height:10px; }
+  .topbar .noiseMid .small{ display:none !important; } /* hide (D debug) text on touch */
+
+  /* Hide the remaining HUD grid in landscape touch (we only want topbar + hint) */
+  .hud{ display:none !important; }
+
+  /* Hint directly under the topbar (centered) */
+  .hint{
+    top: 64px;
+    bottom: auto !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    max-width: min(92%, 720px);
+    text-align:center;
+  }
+}
+
+/* --- UI-only micro tuning (touch + landscape only) ---
+   Smaller joystick + hints slightly higher (no logic changes)
+*/
+@media (pointer: coarse) and (orientation: landscape){
+  #joyZone{ width:80px; height:80px; }
+  #joyStick{ width:28px; height:28px; margin-left:-14px; margin-top:-14px; }
+  .hint{ top:54px !important; }
+}
+
+</style>
+  <link rel="icon" href="data:,">
+</head>
+<body>
+<div id="wrap" class="uiHidden">
+  <canvas id="c"></canvas>
+  <div id="rotateOverlay" aria-live="polite" aria-label="Rotate device message">
+    <div class="card">
+      <div class="icon">📱↻</div>
+      <div class="title">Rotate to landscape</div>
+      <div class="sub">This game plays best in landscape on iPhone/iPad.<br/>Rotate your device to continue.</div>
+    </div>
+  </div>
+
+
+
+  <div id="joyZone" aria-label="Joystick"><div id="joyBase"><div id="joyStick"></div></div></div>
+  <div class="topbar">
+    <div class="pill">Quiet Night</div>
+    <div class="pill">3:00 AM</div>
+<div class="pill" id="benjiPill" style="display:none;">Benji woke up!</div>
+  </div>
+  <div class="hud">
+    <div class="panel row">
+      <strong>Noise</strong>
+      <div class="bar"><i id="noiseFill"></i></div>
+      <span id="noiseLabel">0%</span>
+      <span class="small">(<span class="kbd">D</span> debug)</span>
+    </div>
+    <div class="panel">
+      <div><b>Move:</b> <span class="kbd">Arrows</span> / Touch</div>
+      <div class="small"><b>Interact:</b> <span class="kbd">Space</span> / Action • <b>Restart:</b> <span class="kbd">R</span></div>
+    </div>
+  </div>
+  <div class="btns">
+<button class="btn" data-m="up">▲</button>
+    <button class="btn" data-m="left">◀</button>
+    <button class="btn" data-m="right">▶</button>
+    <button class="btn" data-m="down">▼</button>
+    <button class="btn action" id="doBtn">Action</button>
+    <button class="btn util" id="restartBtn">Play Again</button>
+  </div>
+  <div class="panel hint" id="hint" style="display:none">Loading… Put <b>bedroom_bg.png</b>, <b>bedroom_fg.png</b>, and <b>Jamie.png</b> in the same folder.</div>
+
+  <!-- UI overlays (start screen / instructions / TV video) -->
+  <div class="uiLayer" id="uiLayer">
+
+  <div id="debugToast" class="hidden" aria-hidden="true"></div>
+
+  <!-- Start Screen -->
+  <div id="startScreen" class="hidden">
+    <div class="startBg" id="startBg"></div>
+    <div class="startShade"></div>
+    <div class="startUI" aria-label="Start Screen">
+      <button class="startBtn" id="startBtn" type="button">START</button>
+      <button class="microLink" id="howToBtn" type="button">How to go to bed</button>
+    </div>
+    <button id="whoIsSuss" type="button">Who is Suss?</button>
+  </div>
+
+  <!-- How To modal -->
+  <div id="howToModal" class="modal hidden" aria-hidden="true">
+    <div class="backdrop" data-close="1"></div>
+    <div class="panelCard" role="dialog" aria-modal="true" aria-label="How to go to bed">
+      <div class="titleRow">
+        <div class="kicker">How to go to bed</div>
+        <button class="closeX" id="howToClose" type="button" aria-label="Close" data-close="1">×</button>
+      </div>
+
+      <div class="howToImgWrap">
+        <img id="howToImg" src="how_to_go_to_bed.png" alt="How to go to bed" />
+        <button id="howToImgGotIt" type="button" aria-label="Got it" data-close="1"></button>
+      </div>
+
+      <div class="ctaRow">
+        <button class="ctaBtn" type="button" data-close="1">Got it</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Who is Suss TV modal -->
+  <div id="tvModal" class="modal hidden" aria-hidden="true">
+    <div class="backdrop" data-close="1"></div>
+    <div class="panelCard" role="dialog" aria-modal="true" aria-label="Who is Suss">
+      <div class="titleRow">
+        <div class="kicker">Who is Suss?</div>
+        <button class="closeX" type="button" aria-label="Close" data-close="1">×</button>
+      </div>
+
+      <div class="tvWrap">
+        <img id="tvFrame" src="tv_frame.png" alt="" />
+        <div class="tvScreen" id="tvScreen">
+          <div class="tvIdle" id="tvIdle" role="button" tabindex="0" aria-label="Play video">
+            <div class="playIcon"></div>
+            <div class="idleTitle">Who is Suss?</div>
+          </div>
+
+          <video id="sussVideo" playsinline controls preload="metadata">
+            <source src="whos-suss.mp4" type="video/mp4" />
+          </video>
+        </div>
+      </div>
+
+      <div class="tvFooter">
+        <button class="ctaBtn" id="tvBack" type="button" data-close="1">Back to bed</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+
+<script>
+  const DEBUG_TOAST = false;
+(() => {
+  const BACKGROUND_SRC = "bedroom_bg.png";
+  const FOREGROUND_SRC = "bedroom_fg.png";
+  const JAMIE_SRC = "Jamie.png";
+  const JAMIE_W = 250;
+  const JAMIE_H = 400;
+  const JAMIE_FOOT_X = 0.55;
+  const JAMIE_FOOT_Y = 0.95;
+  const PLAYER_SPEED = 220;
+  const CAM_STRENGTH = 0.08;
+  const CAM_MAX_SHIFT_X = 80;
+  const CAM_MAX_SHIFT_Y = 60;
+  // --- HOP / DASH (kid-friendly “jump”) ---
+  const HOP_DISTANCE = 120;    // pixels traveled per hop
+  const HOP_DURATION = 0.14;   // seconds hop lasts
+  const HOP_COOLDOWN = 1.20;   // seconds between hops
+  const HOP_NOISE = 6;         // noise added when hop starts
+  const HOP_BONK_NOISE = 6;    // extra noise if hop hits an obstacle
+
+const DEBUG_UI = true; // DEBUG ON: show startup/loading/debug-only hint text
+
+// --- Objective hints (Step 6) ---
+const HINT_INITIAL_DELAY_MS = 1800; // delay before showing first hint after play starts
+const HINT_COOLDOWN_MS = 1000;      // delay after completing an objective before hint updates
+
+// Single place to edit hint copy:
+const HINT_COPY = {
+  n1_bed:   "Go to bed.",
+  n2_teeth: "Brush teeth at the sink.",
+  n2_phone: "Plug in your phone.",
+  n2_bed:   "Go to bed.",
+  n3_teeth: "Brush teeth at the sink.",
+  n3_phone: "Plug in your phone.",
+  n3_benji: "Settle Benji.",
+  n3_bed:   "Go to bed.",
+};
+
+  // ---------- UI / SCREENS (Start, Instructions, Who is Suss TV) ----------
+  const START_SCREEN_BG_SRC = "start_screen.png"; // provided asset
+  const UI_CLICK_SRC = "ui_click.wav"; // optional; if missing, it will silently fail
+
+  const wrapEl = document.getElementById("wrap");
+
+  // --- Touch joystick state (mobile) ---
+  const joyZoneEl = document.getElementById("joyZone");
+  const joyStickEl = document.getElementById("joyStick");
+
+  // Global joystick state read by movement code
+  const joyState = { active:false, ix:0, iy:0, mag:0 };
+
+  // Joystick config (in px; scaled with CSS sizing)
+  const JOY_MAX = 60;      // max travel for the stick
+  const JOY_DEAD = 6;      // deadzone
+
+  let joyPointerId = null;
+  let joyCenterX = 0, joyCenterY = 0;
+
+  function setJoyVisual(dx, dy){
+    // clamp to max
+    const dist = Math.hypot(dx, dy);
+    const clamped = Math.min(JOY_MAX, dist);
+    const ang = dist > 0 ? Math.atan2(dy, dx) : 0;
+    const cx = clamped * Math.cos(ang);
+    const cy = clamped * Math.sin(ang);
+    if (joyStickEl){
+      joyStickEl.style.transform = `translate(${cx}px, ${cy}px)`;
+    }
+  }
+
+  function resetJoy(){
+    joyState.active = false;
+    joyState.ix = 0; joyState.iy = 0; joyState.mag = 0;
+    joyPointerId = null;
+    setJoyVisual(0,0);
+  }
+
+  function updateJoyFromClientXY(clientX, clientY){
+    const dx = clientX - joyCenterX;
+    const dy = clientY - joyCenterY;
+
+    const dist = Math.hypot(dx, dy);
+    const magRaw = dist / JOY_MAX;
+    const mag = Math.max(0, Math.min(1, magRaw));
+
+    if (dist < JOY_DEAD){
+      joyState.ix = 0; joyState.iy = 0; joyState.mag = 0;
+      setJoyVisual(0,0);
+      return;
+    }
+
+    // Normalized direction, scaled by mag (for analog creep)
+    const nx = dx / (dist || 1);
+    const ny = dy / (dist || 1);
+
+    joyState.ix = nx * mag;
+    joyState.iy = ny * mag;
+    joyState.mag = mag;
+
+    setJoyVisual(dx, dy);
+  }
+
+  function isCoarsePointer(){
+    return window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  }
+
+  function enableJoystickIfNeeded(){
+    if (!joyZoneEl) return;
+    // show/hide handled by CSS, but keep state clean
+    if (!isCoarsePointer()) resetJoy();
+  }
+
+  // Pointer Events (preferred)
+  if (joyZoneEl){
+    joyZoneEl.addEventListener("pointerdown", (e)=>{
+      if (typeof rotateGateActive !== "undefined" && rotateGateActive) return;
+      if (!isCoarsePointer()) return;
+      e.preventDefault();
+      joyPointerId = e.pointerId;
+      joyState.active = true;
+
+      const r = joyZoneEl.getBoundingClientRect();
+      joyCenterX = r.left + r.width/2;
+      joyCenterY = r.top  + r.height/2;
+
+      try{ joyZoneEl.setPointerCapture(joyPointerId); }catch(_e){}
+      updateJoyFromClientXY(e.clientX, e.clientY);
+    }, { passive:false });
+
+    joyZoneEl.addEventListener("pointermove", (e)=>{
+      if (typeof rotateGateActive !== "undefined" && rotateGateActive) return;
+      if (!joyState.active) return;
+      if (joyPointerId !== null && e.pointerId !== joyPointerId) return;
+      e.preventDefault();
+      updateJoyFromClientXY(e.clientX, e.clientY);
+    }, { passive:false });
+
+    joyZoneEl.addEventListener("pointerup", (e)=>{
+      if (joyPointerId !== null && e.pointerId !== joyPointerId) return;
+      e.preventDefault();
+      resetJoy();
+    }, { passive:false });
+
+    joyZoneEl.addEventListener("pointercancel", ()=> resetJoy(), { passive:true });
+    joyZoneEl.addEventListener("lostpointercapture", ()=> resetJoy(), { passive:true });
+  }
+
+  // Touch Events fallback (older Safari edge cases)
+  if (joyZoneEl){
+    joyZoneEl.addEventListener("touchstart", (e)=>{
+      if (!isCoarsePointer()) return;
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      const r = joyZoneEl.getBoundingClientRect();
+      joyCenterX = r.left + r.width/2;
+      joyCenterY = r.top  + r.height/2;
+      joyState.active = true;
+      updateJoyFromClientXY(t.clientX, t.clientY);
+    }, { passive:false });
+
+    joyZoneEl.addEventListener("touchmove", (e)=>{
+      if (!joyState.active) return;
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      updateJoyFromClientXY(t.clientX, t.clientY);
+    }, { passive:false });
+
+    joyZoneEl.addEventListener("touchend", (e)=>{
+      if (!joyState.active) return;
+      e.preventDefault();
+      resetJoy();
+    }, { passive:false });
+
+    joyZoneEl.addEventListener("touchcancel", ()=> resetJoy(), { passive:true });
+  }
+
+  // Prevent page scrolling while interacting with the game on iOS
+  if (wrapEl){
+    wrapEl.addEventListener("touchmove", (e)=>{ e.preventDefault(); }, { passive:false });
+  }
+
+  window.addEventListener("resize", enableJoystickIfNeeded);
+  enableJoystickIfNeeded();
+
+  const uiLayer = document.getElementById("uiLayer");
+  const startScreenEl = document.getElementById("startScreen");
+  const startBgEl = document.getElementById("startBg");
+  const startBtnEl = document.getElementById("startBtn");
+  const howToBtnEl = document.getElementById("howToBtn");
+  const whoIsSussEl = document.getElementById("whoIsSuss");
+
+  // Session-only nudge: pulse "Who is Suss" until first click per page load
+  let whoIsSussClickedThisSession = false;
+
+  function pulseWhoIsSuss(){
+    if (whoIsSussClickedThisSession) return;
+    if (!whoIsSussEl) return;
+    whoIsSussEl.classList.add("attention-pulse");
+  }
+
+
+  const howToModalEl = document.getElementById("howToModal");
+  const howToCloseEl = document.getElementById("howToClose");
+  const howToImgGotItEl = document.getElementById("howToImgGotIt");
+
+  const tvModalEl = document.getElementById("tvModal");
+  const tvIdleEl = document.getElementById("tvIdle");
+  const tvScreenEl = document.getElementById("tvScreen");
+  const sussVideoEl = document.getElementById("sussVideo");
+  // --- WHO IS SUSS: FULLSCREEN VIDEO BEHAVIOR ---
+  // Requirements:
+  // - Tap the video area to enter fullscreen playback.
+  // - When playback ends OR user exits fullscreen / taps video, return to the TV frame idle screen (tv_frame.png view).
+  let sussFsRequested = false;
+
+  function resetTvToFrame(){
+    if (!sussVideoEl) return;
+    try { sussVideoEl.pause(); } catch(e) {}
+    try { sussVideoEl.currentTime = 0; } catch(e) {}
+    sussVideoEl.style.display = "none";
+    if (tvIdleEl) tvIdleEl.style.display = "flex";
+    sussFsRequested = false;
+  }
+
+  async function requestSussFullscreen(){
+    if (!sussVideoEl) return;
+    // iOS Safari often requires webkitEnterFullscreen for <video>
+    try{
+      if (sussVideoEl.requestFullscreen) {
+        await sussVideoEl.requestFullscreen();
+        sussFsRequested = true;
+        return;
+      }
+    } catch(e) {}
+    try{
+      if (sussVideoEl.webkitRequestFullscreen) {
+        sussVideoEl.webkitRequestFullscreen();
+        sussFsRequested = true;
+        return;
+      }
+    } catch(e) {}
+    try{
+      if (sussVideoEl.webkitEnterFullscreen) {
+        sussVideoEl.webkitEnterFullscreen();
+        sussFsRequested = true;
+        return;
+      }
+    } catch(e) {}
+  }
+
+  function exitAnyFullscreen(){
+    try{
+      if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
+    } catch(e) {}
+    try{
+      if (document.webkitFullscreenElement && document.webkitExitFullscreen) document.webkitExitFullscreen();
+    } catch(e) {}
+  }
+
+  // One-time wiring for end/exit behavior
+  (function initSussVideoFullscreenWiring(){
+    if (!sussVideoEl) return;
+
+    // When the video ends, go back to the TV frame idle state.
+    sussVideoEl.addEventListener("ended", () => {
+      exitAnyFullscreen();
+      resetTvToFrame();
+    });
+
+    // iOS Safari: fires when user taps "Done" in native fullscreen player.
+    sussVideoEl.addEventListener("webkitendfullscreen", () => {
+      resetTvToFrame();
+    });
+
+    // When fullscreen exits (desktop / Android browsers), go back to the TV frame idle state.
+    document.addEventListener("fullscreenchange", () => {
+      if (uiOverlay !== "tv") return;
+      if (!document.fullscreenElement && sussFsRequested) resetTvToFrame();
+    });
+    document.addEventListener("webkitfullscreenchange", () => {
+      if (uiOverlay !== "tv") return;
+      if (!document.webkitFullscreenElement && sussFsRequested) resetTvToFrame();
+    });
+  })();
+
+  // ---------- UI STATE (base screen + overlay) ----------
+  // Base screen: "start" | "play"
+  // Overlay: null | "instructions" | "tv"
+  let uiScreen = "start";
+  let uiOverlay = null;
+  let justOpenedModal = false;
+
+  // Optional click sound (best-effort)
+  let uiClick = null;
+  function initUiClick(){
+    if (uiClick) return;
+    uiClick = new Audio(UI_CLICK_SRC);
+    uiClick.preload = "auto";
+    uiClick.volume = 0.25;
+  }
+  function playUiClick(){
+    try{
+      initUiClick();
+      if (!uiClick) return;
+      uiClick.pause();
+      uiClick.currentTime = 0;
+      const p = uiClick.play();
+      if (p && p.catch) p.catch(()=>{});
+    } catch(e){}
+  }
+
+  // Debug toast (UI utility)
+  const debugToastEl = document.getElementById("debugToast");
+  function showToast(msg){
+    if(!DEBUG_TOAST) return;
+    if (!debugToastEl) return;
+    debugToastEl.textContent = msg;
+    debugToastEl.classList.remove("hidden");
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => debugToastEl.classList.add("hidden"), 1200);
+  }
+
+  // Start screen background as CSS background image
+  (function initStartBg(){
+    // If the asset is missing, it will just show the fallback background color.
+    startBgEl.style.backgroundImage = `url('${START_SCREEN_BG_SRC}')`;
+  })();
+
+  
+
+
+// --- Touch landscape UI: place Noise meter between top pills ---
+(function initTouchLandscapeTopbarNoise(){
+  const isTouch = (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) || ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
+
+  function isLandscape(){
+    return window.innerWidth > window.innerHeight;
+  }
+
+  const topbar = document.querySelector(".topbar");
+  const hud = document.querySelector(".hud");
+  const noisePanel = document.querySelector(".hud .panel.row");
+
+  function apply(){
+    if (!topbar || !hud || !noisePanel) return;
+
+    const wantTop = isTouch && isLandscape();
+
+    if (wantTop) {
+      noisePanel.classList.add("noiseMid");
+
+      // Insert noise panel between the first and second pill.
+      const pills = topbar.querySelectorAll(".pill");
+      const first = pills[0] || null;
+      const second = pills[1] || null;
+
+      if (noisePanel.parentElement !== topbar) {
+        if (second) topbar.insertBefore(noisePanel, second);
+        else topbar.appendChild(noisePanel);
+      } else {
+        // Ensure correct ordering if DOM changed.
+        if (second && noisePanel.nextSibling !== second) topbar.insertBefore(noisePanel, second);
+      }
+
+      // Hide debug hint text in touch UI.
+      const small = noisePanel.querySelector(".small");
+      if (small) small.style.display = "none";
+    } else {
+      // Move back into HUD when not touch landscape.
+      if (noisePanel.parentElement !== hud) {
+        noisePanel.classList.remove("noiseMid");
+        hud.insertBefore(noisePanel, hud.firstChild);
+        const small = noisePanel.querySelector(".small");
+        if (small) small.style.display = "";
+      }
+    }
+  }
+
+  window.addEventListener("resize", apply, { passive: true });
+  window.addEventListener("orientationchange", apply, { passive: true });
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", apply, { passive: true });
+
+  // Run once on startup (after initial layout).
+  setTimeout(apply, 0);
+})();
+function renderUI(){
+    const overlayOpen = (uiOverlay !== null);
+
+    // Hide gameplay HUD when not in play OR when an overlay is open.
+    wrapEl.classList.toggle("uiHidden", (uiScreen !== "play") || overlayOpen);
+
+    // Start screen stays visible in "start" even when an overlay is open.
+    startScreenEl.classList.toggle("hidden", uiScreen !== "start");
+
+    // Overlays are independent of base screen. IMPORTANT: the existing CSS .hidden uses
+    // display:none !important, so we must remove/add the class explicitly for the active overlay.
+    if (uiOverlay === "instructions") {
+      howToModalEl.classList.remove("hidden");
+      howToModalEl.style.display = "flex";
+    } else {
+      howToModalEl.classList.add("hidden");
+      howToModalEl.style.display = "none";
+    }
+
+    if (uiOverlay === "tv") {
+      tvModalEl.classList.remove("hidden");
+      tvModalEl.style.display = "flex";
+    } else {
+      tvModalEl.classList.add("hidden");
+      tvModalEl.style.display = "none";
+    }
+  }
+
+  function setUiScreen(next){
+    uiScreen = next;
+    renderUI();
+  }
+
+  function setUiOverlay(next){
+    uiOverlay = next;
+    renderUI();
+  }
+
+  function isGameplayUIActive(){
+    return (uiScreen === "play") && (uiOverlay === null);
+  }
+
+  function openInstructions(){
+    playUiClick();
+    // Prevent backdrop click from immediately closing after opening
+    justOpenedModal = true;
+    setUiOverlay("instructions");
+    setTimeout(() => { justOpenedModal = false; }, 250);
+  }
+  function closeInstructions(){
+    playUiClick();
+    setUiOverlay(null);
+  }
+
+  function openTv(){
+    showToast('Opening Who is Suss…');
+    console.log("Who is Suss clicked -> opening TV");
+    // Flip UI state first so the overlay becomes visible even if later media ops fail.
+    setUiOverlay("tv");
+    playUiClick();
+    // Reset video UI to idle state
+    resetTvToFrame();
+  }
+
+  function closeTv(){
+    playUiClick();
+    exitAnyFullscreen();
+    resetTvToFrame();
+    setUiOverlay(null);
+  }
+
+  function playTvVideo(){
+    playUiClick();
+    if (!sussVideoEl) return;
+
+    if (tvIdleEl) tvIdleEl.style.display = "none";
+    sussVideoEl.style.display = "block";
+
+    try{
+      const p = sussVideoEl.play();
+      if (p && p.catch) p.catch(()=>{});
+    } catch(e){}
+
+    // Attempt fullscreen from the same user gesture.
+    requestSussFullscreen();
+  }
+
+  // Wire UI events
+  startBtnEl.addEventListener("click", (e) => { try{ e.preventDefault(); e.stopPropagation(); }catch(_e){}
+    playUiClick();
+    try{
+      setUiScreen("play"); setUiOverlay(null);
+      gameState = "play";
+      // Ensure a clean baseline and start Night 1 fresh
+      if (typeof reset === 'function') reset();
+  updateRotateGate();
+      // Start audio from gesture, if possible
+      if (typeof startSnore === 'function') startSnore();
+    } catch(err){
+      console.error('START failed:', err);
+      // fall back: keep start screen so user isn't stuck in a broken state
+      setUiOverlay(null);
+      gameState = "start";
+    }
+  });
+
+  howToBtnEl.addEventListener("click", (e) => { try{ e.preventDefault(); e.stopPropagation(); }catch(_e){} openInstructions(); });
+  if (howToCloseEl) howToCloseEl.addEventListener("click", closeInstructions);
+  if (howToImgGotItEl) howToImgGotItEl.addEventListener("click", closeInstructions);
+  whoIsSussEl.addEventListener("click", (e) => {
+    try{ e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }catch(_e){}
+
+    // Stop pulsing after first click this session
+    whoIsSussClickedThisSession = true;
+    try{ whoIsSussEl.classList.remove("attention-pulse"); }catch(_e){}
+
+    setTimeout(openTv, 0);
+  });
+
+  // Nudge on first load
+  pulseWhoIsSuss();
+// Close modals on backdrop / X
+  function hookModalClose(modalEl, closeFn){
+    modalEl.addEventListener("click", (e) => {
+      const t = e.target;
+      if (justOpenedModal) return;
+      if (t && t.dataset && t.dataset.close === "1") closeFn();
+    });
+  }
+  hookModalClose(howToModalEl, closeInstructions);
+  hookModalClose(tvModalEl, closeTv);
+
+  tvIdleEl.addEventListener("click", playTvVideo);
+  document.getElementById("tvBack").addEventListener("click", closeTv);
+
+  // ESC closes overlays (desktop)
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape"){
+      if (uiOverlay === "instructions") closeInstructions();
+      else if (uiOverlay === "tv") closeTv();
+    }
+  });
+
+  // Start in Start Screen
+  setUiOverlay(null);
+
+
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const noiseFill = document.getElementById('noiseFill');
+  const noiseLabel = document.getElementById('noiseLabel');
+  const hint = document.getElementById('hint');
+const doBtn = document.getElementById('doBtn');
+restartBtn = document.getElementById('restartBtn');
+  
+  const benjiPill = document.getElementById('benjiPill');
+
+
+
+const rotateOverlay = document.getElementById('rotateOverlay');
+let rotateGateActive = false;
+
+function isCoarsePointer(){
+  try { return window.matchMedia && window.matchMedia('(pointer: coarse)').matches; }
+  catch(e){ return false; }
+}
+function isLandscape(){
+  return window.innerWidth >= window.innerHeight;
+}
+function setRotateGate(active){
+  rotateGateActive = active;
+  if (rotateOverlay) rotateOverlay.style.display = active ? 'flex' : 'none';
+  // Cancel active touch joystick drags to prevent stuck movement.
+  if (active && typeof resetJoystick === 'function') resetJoystick();
+  if (active && typeof resetJoy === 'function') resetJoy();
+}
+function updateRotateGate(){
+  const shouldGate = isCoarsePointer() && !isLandscape();
+  if (shouldGate !== rotateGateActive) setRotateGate(shouldGate);
+}
+
+window.addEventListener('resize', () => { setTimeout(updateRotateGate, 0); }, { passive:true });
+window.addEventListener('orientationchange', () => { setTimeout(updateRotateGate, 150); }, { passive:true });
+if (window.visualViewport){
+  window.visualViewport.addEventListener('resize', () => { setTimeout(updateRotateGate, 0); }, { passive:true });
+}
+
+// Run once on load so the rotate overlay shows immediately (even on the start screen)
+setTimeout(updateRotateGate, 0);
+
+  // Cached view size (avoid getBoundingClientRect() every frame on mobile)
+  let viewWCache = 0, viewHCache = 0;
+  let viewW = 0, viewH = 0; // alias used by draw()
+
+
+// Hint state (objective hints vs transient notifications)
+let hintTransientUntil = 0;   // timestamp (performance.now ms) until which transient hint owns the hint box
+let hintSuppressedUntil = 0;  // timestamp until which objective hints are suppressed (start delay / cooldown)
+let currentObjectiveHintKey = null;
+
+
+  function resize(){
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const rect = canvas.getBoundingClientRect();
+    viewWCache = rect.width;
+    viewHCache = rect.height;
+    viewW = viewWCache;
+    viewH = viewHCache;
+    canvas.width  = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+function showHint(t){
+  // Transient notifications (used for asset errors, feedback, etc.)
+  hint.innerHTML = t;
+  hint.style.opacity = "1";
+  hint.style.display = "block";
+  hintTransientUntil = performance.now() + 2600;
+  clearTimeout(showHint._t);
+  showHint._t = setTimeout(()=> hint.style.opacity="0.78", 2600);
+}
+
+function computeObjectiveHintKey(){
+  // Do not show objective hints outside active play.
+  if (gameState !== "play") return null;
+  // Do not show during moment overlays.
+  if (moment) return null;
+
+  // Night 1 (tutorial): bed only.
+  if (night === 1){
+    return "n1_bed";
+  }
+
+  // Night 2: teeth + phone + bed.
+  if (night === 2){
+    if (!interact.sink.done) return "n2_teeth";
+    if (!interact.phone.done) return "n2_phone";
+    return "n2_bed";
+  }
+
+  // Night 3: teeth + phone + (Benji after phone moment) + bed.
+  if (night === 3){
+    if (!interact.sink.done) return "n3_teeth";
+    if (!interact.phone.done) return "n3_phone";
+    if (interact.benji.active && !interact.benji.done) return "n3_benji";
+    return "n3_bed";
+  }
+
+  return null;
+}
+
+function updateObjectiveHint(){
+  // Hide hints during interstitials / win/lose screens.
+  if (gameState !== "play" || moment) {
+    hint.style.display = "none";
+    return;
+  }
+
+  const now = performance.now();
+  if (now < hintSuppressedUntil) return;
+  if (now < hintTransientUntil) return;
+
+  const key = computeObjectiveHintKey();
+  if (!key) return;
+
+  if (currentObjectiveHintKey !== key){
+    currentObjectiveHintKey = key;
+    hint.textContent = HINT_COPY[key] || "";
+    hint.style.opacity = "0.82";
+    hint.style.display = "block";
+  }
+}
+
+
+  const bg = new Image();
+  const fg = new Image();
+  const jamieImg = new Image();
+  const failImg = new Image();
+  const teethImg = new Image();
+  let teethReady = false;
+  teethImg.onload = () => { teethReady = true; };
+  teethImg.onerror = () => { teethReady = false; };
+  teethImg.src = "teeth.png";   
+  const phoneImg = new Image();
+  let phoneReady = false;
+  phoneImg.onload = () => { phoneReady = true; };
+phoneImg.onerror = () => { phoneReady = false; showHint("Could not load phone.png"); };
+  phoneImg.src = "phone.png";  
+  let failReady = false;
+  failImg.onload = () => { failReady = true; };
+failImg.onerror = () => { failReady = false; showHint("Could not load fail.png"); };
+  failImg.src = "fail.png";
+  const winImg = new Image();
+  let winReady = false;
+  winImg.onload = () => { winReady = true; };
+  winImg.onerror = () => { winReady = false; showHint("Could not load win.png"); };
+winImg.src = "win.png";
+
+  const startImg = new Image();
+  let startReady = false;
+  startImg.onload = () => { startReady = true; };
+  startImg.onerror = () => { startReady = false; /* start screen still works via HTML bg */ };
+  startImg.src = "start_screen.png";
+
+
+// --- benji (Night 3) assets ---
+const benjiImg = new Image();
+let benjiReady = false;
+benjiImg.onload = () => { benjiReady = true; };
+benjiImg.onerror = () => { 
+  benjiReady = false; 
+  showHint("Could not load benji.png"); 
+};
+benjiImg.src = "benji.png";
+benjiImg._altTried = false;
+benjiImg.onerror = ()=>{
+  if(benjiImg._altTried) return;
+  benjiImg._altTried = true;
+  benjiImg.src = "Benji.png";
+};
+
+const benjiMomentImg = new Image();
+let benjiMomentReady = false;
+benjiMomentImg.onload = () => { benjiMomentReady = true; };
+benjiMomentImg.onerror = () => { 
+  benjiMomentReady = false; 
+  showHint("Could not load benji_settled.png"); 
+};
+benjiMomentImg.src = "benji_settled.png";
+benjiMomentImg._altTried = false;
+benjiMomentImg.onerror = ()=>{
+  if(benjiMomentImg._altTried) return;
+  benjiMomentImg._altTried = true;
+  benjiMomentImg.src = "Benji_settled.png";
+};
+
+  let bgReady = false, fgReady = false, jamieReady = false;
+  const world = { w: 1536, h: 1024 };
+  bg.onload = () => { bgReady = true; world.w = bg.naturalWidth || world.w; world.h = bg.naturalHeight || world.h; };
+  bg.onerror = () => showHint("Could not load bedroom_bg.png");
+  fg.onload = () => { fgReady = true; };
+  fg.onerror = () => showHint("Could not load bedroom_fg.png");
+  jamieImg.onload = () => { jamieReady = true; };
+  jamieImg.onerror = () => showHint("Could not load Jamie.png");
+
+  bg.src = BACKGROUND_SRC;
+  fg.src = FOREGROUND_SRC;
+  jamieImg.src = JAMIE_SRC;
+
+  const SPAWN_X = 70;
+  const SPAWN_Y = 760;
+  const player = { x: SPAWN_X, y: SPAWN_Y, speed: PLAYER_SPEED };
+  let debug = false;
+  let noise = 0;
+  let gameState = "start";
+let night = 1; // 1..3
+
+// benji spawn / pressure
+let benjiPending = false;    // true after phone moment is dismissed in Night 2
+let benjiKeysLeft = 0;       // counts down from random 3..5 keydowns (desktop)
+let benjiAppearAt = 0;       // timestamp when Benji should appear (mobile + fallback)
+let benjiStartTime = 0;      // performance.now() when benji becomes active
+
+const BENJI_RAMP_SECONDS = 12;   // recommendation
+const BENJI_MAX_NOISE_PER_SEC = 1.8;
+
+// Track which moment was dismissed (so we can trigger benji after phone panel closes)
+let momentDismissedKind = null;
+  // Hop state
+  let hopTimeLeft = 0;         // seconds remaining in hop
+  let hopCooldownLeft = 0;     // seconds until next hop allowed
+  let hopVX = 0, hopVY = 0;    // hop velocity in px/sec
+  let hopRequested = false;
+
+  // Last movement direction (used if Shift is pressed without holding arrows)
+  let lastDirX = 1, lastDirY = 0;
+
+
+let moment = null;            // "teeth" | "phone" | null
+let momentPhase = "off";      // "off" | "hold" | "fadeOut"
+let momentAlpha = 0;          // 0..1 overlay opacity
+let momentCanDismiss = false; 
+  function setNoise(v){ noise = Math.max(0, Math.min(100, v)); noiseFill.style.width = noise + "%"; noiseLabel.textContent = noise + "%"; }
+function addNoise(n){
+  if (gameState !== "play") return;
+  setNoise(noise + n);
+if (noise >= 100) {
+  gameState = "lose";
+
+  // Stop everything else FIRST (but never let a missing function break loss handling)
+  try { if (typeof stopAllSuccessSfx === "function") stopAllSuccessSfx(); } catch(e) {}
+  try { if (typeof stopBenjiWake === "function") stopBenjiWake(); } catch(e) {}
+  try { if (typeof stopSnoreLoop === "function") stopSnoreLoop(); } catch(e) {}
+  try { snoreOn = false; } catch(e) {}
+
+  // Optional: kill any moment overlay
+  moment = null;
+  momentPhase = "off";
+  momentAlpha = 0;
+
+  // THEN play loss stinger (only once)
+  try {
+    if (typeof initLoseAudio === "function") initLoseAudio();
+    if (loseAudio) {
+      loseAudio.currentTime = 0;
+      const p = loseAudio.play();
+      if (p && p.catch) p.catch(()=>{});
+    }
+  } catch(e) {}
+
+  showHint("Evan wakes up. Game over. R to restart.");
+}
+
+
+
+}
+  const obstacles = [
+    { x: 200, y: 700, w: 250, h: 300 },
+    { x: 230, y: 800, w: 550, h: 300 },
+    { x: 1350, y: 750, w: 100, h: 120 },
+    { x: 800, y: 600, w: 600, h: 50},
+    { x: 600, y: 100, w: 600, h: 250},
+    { x: 600, y: 300, w: 400, h: 250},
+  ];
+  const interact = {
+    sink:  { x: 270, y: 140, w: 340, h: 340, done:false, noise:14, label:"Brushed teeth." },
+    phone: { x: 1290, y: 290, w: 220, h: 220, done:false, noise:12, label:"Phone plugged in." },
+  benji: { x: 150, y: 180, w: 260, h: 360, done:false, active:false, label:"Benji settled." },
+    bed:   { x: 760, y: 400, w: 620, h: 380, done:false, noise:10, label:"You slide into bed." }
+  };
+
+  function rectHitPoint(px, py, r){
+    const PAD = 34;
+    return (px >= r.x - PAD && px <= r.x + r.w + PAD && py >= r.y - PAD && py <= r.y + r.h + PAD);
+  }
+  function collides(nx, ny){ for(const o of obstacles){ if(rectHitPoint(nx, ny, o)) return true; } return false; }
+
+  function bedBlockMessage(){
+    // Night 1: bed is always allowed (tutorial).
+    if (night === 1) return null;
+
+    // Night 2: teeth + phone required.
+    if (night === 2){
+      if (!interact.sink.done) return "Brush your teeth.";
+      if (!interact.phone.done) return "Plug in your phone.";
+      return null;
+    }
+
+    // Night 3: teeth + phone + Benji required.
+    if (night === 3){
+      if (!interact.sink.done) return "Brush your teeth.";
+      if (!interact.phone.done) return "Plug in your phone.";
+      if (!interact.benji.done) return "Settle Benji.";
+      return null;
+    }
+
+    return null;
+  }
+
+  function tryAction(){
+    if (typeof rotateGateActive !== "undefined" && rotateGateActive) return;
+    if(gameState !== "play") return;
+
+    for(const k of Object.keys(interact)){
+      const z = interact[k];
+
+      // Benji is only relevant on Night 3, and only after he becomes active
+      if (k === "benji") {
+        if (night !== 3) continue;
+        if (!z.active) continue;
+      }
+
+      if(z.done) continue;
+
+      if(rectHitPoint(player.x, player.y, z)){
+
+        // Night 1 is tutorial: only bed is actionable.
+        if (night === 1 && (k === "sink" || k === "phone")) {
+          showHint("Go to bed.");
+          return;
+        }
+
+        // Bed has night-specific gating + win progression.
+        if (k === "bed"){
+          const msg = bedBlockMessage();
+          if (msg){
+            addNoise(4);
+            showHint(msg);
+            return;
+          }
+
+          // Success: complete the night (or the game).
+          z.done = true;
+          addNoise(z.noise || 10);
+
+          // Objective hint cooldown after completing an objective
+          hintSuppressedUntil = performance.now() + HINT_COOLDOWN_MS;
+          currentObjectiveHintKey = null;
+
+          playSuccessSfx("bed");
+
+          if (night === 1){
+            enterInterstitial("i_post_n1");
+          } else if (night === 2){
+            enterInterstitial("i_post_n2");
+          } else {
+            gameState = "win";
+            showHint("Success! R to restart.");
+          }
+          return;
+        }
+
+        // Normal interactions (sink/phone/benji)
+        z.done = true;
+        addNoise(z.noise);
+
+        // Objective hint cooldown after completing any objective
+        hintSuppressedUntil = performance.now() + HINT_COOLDOWN_MS;
+        currentObjectiveHintKey = null;
+
+        // Show moment overlays for specific interactions
+        if (k === "sink") { playSuccessSfx("sink"); showMoment("teeth"); return; }
+        if (k === "phone") { playSuccessSfx("phone"); showMoment("phone"); return; }
+
+        if (k === "benji") {
+          z.done = true;
+          z.active = false;        // Benji disappears immediately
+          playSuccessSfx("benji");
+          // Redraw the frozen background once without Benji before the moment overlay appears.
+          // This prevents Benji from remaining visible behind the overlay due to the moment-draw early return.
+          draw();
+          showMoment("benji");     // shows benji_settled.png
+          return;
+        }
+
+        showHint(z.label);
+        return;
+      }
+    }
+    showHint("Nothing to do here.");
+  }
+
+function reset(){
+    // Full reset back to Night 1 baseline
+    gameState = "play";
+    night = 1;
+
+    // Noise + HUD
+    setNoise(0);
+    stopBenjiWake();
+    if (benjiPill) benjiPill.style.display = "none";
+
+    // Tasks
+    for (const k of Object.keys(interact)) {
+      interact[k].done = false;
+      if (k === "benji") interact[k].active = false;
+    }
+
+    // Moments / overlays
+    moment = null;
+    momentPhase = "off";
+    momentAlpha = 0;
+    momentCanDismiss = false;
+    momentDismissedKind = null;
+
+    // Benji timing
+    benjiPending = false;
+    benjiKeysLeft = 0;
+    benjiStartTime = 0;
+
+    // Hop state
+    hopTimeLeft = 0;
+    hopCooldownLeft = 0;
+    hopVX = 0; hopVY = 0;
+    hopRequested = false;
+
+    // Player
+    player.x = SPAWN_X;
+    player.y = SPAWN_Y;
+
+    // Objective hint timing
+    currentObjectiveHintKey = null;
+    hintTransientUntil = 0;
+    hintSuppressedUntil = performance.now() + HINT_INITIAL_DELAY_MS;
+
+// Hide initial loading hint unless debugging
+if (!DEBUG_UI) {
+  hint.style.display = "none";
+}
+
+// If debugging, allow the startup/loading hint to be visible
+if (DEBUG_UI) {
+  hint.style.display = "block";
+}
+
+
+    showHint("Restarted. Night 1.");
+  }
+
+
+
+// ----- Interstitial helpers (4 screens + delayed prompt) -----
+
+function startNight(n){
+  night = n;
+  gameState = "play";
+
+  // Reset tasks + noise
+  setNoise(0);
+  stopBenjiWake();
+  for (const k of Object.keys(interact)) {
+    interact[k].done = false;
+    if (k === "benji") interact[k].active = false; // Benji only becomes active later (Night 3)
+  }
+
+  // Reset Benji timing state
+  benjiPending = false;
+  benjiKeysLeft = 0;
+  benjiStartTime = 0;
+  benjiAppearAt = 0;
+
+  // Reset moment bookkeeping (safe cleanup)
+  momentDismissedKind = null;
+
+  // Reset player position for “new night” feel
+  player.x = SPAWN_X;
+  player.y = SPAWN_Y;
+
+  // Objective hint timing
+  currentObjectiveHintKey = null;
+  hintTransientUntil = 0;
+  hintSuppressedUntil = performance.now() + HINT_INITIAL_DELAY_MS;
+}
+
+// ----- Interstitial helpers (4 screens + delayed prompt) -----
+const INTERSTITIAL_PROMPT_DELAY_MS = 800;
+let interstitialShownAt = 0;
+
+function enterInterstitial(state){
+  gameState = state;
+  interstitialShownAt = performance.now();
+}
+
+function interstitialCanAdvance(){
+  return (performance.now() - interstitialShownAt) >= INTERSTITIAL_PROMPT_DELAY_MS;
+}
+
+function drawInterstitial(title, bodyLines, canAdvance){
+  ctx.fillStyle = "#001018";
+  ctx.fillRect(0, 0, viewW, viewH);
+
+  ctx.fillStyle = "#e7eefc";
+  ctx.textAlign = "center";
+
+  ctx.font = "900 44px system-ui";
+  ctx.fillText(title, viewW / 2, viewH / 2 - 60);
+
+  ctx.font = "800 20px system-ui";
+  const lineH = 26;
+  const startY = viewH / 2 - 10;
+  bodyLines.forEach((line, i) => {
+    ctx.fillText(line, viewW / 2, startY + i * lineH);
+  });
+
+  if (canAdvance){
+    ctx.font = "900 18px system-ui";
+    ctx.fillText("Tap to continue", viewW / 2, viewH / 2 + 90);
+  }
+
+  ctx.textAlign = "left";
+}
+
+function handleContinueInput(e){
+  // Moment dismiss has priority
+  if (momentPhase === "hold") {
+    try { if (e) e.preventDefault(); } catch(_e){}
+    dismissMoment();
+    return true;
+  }
+
+  // Interstitials: ignore input until the 0.8s delay has elapsed
+  if (gameState === "i_post_n1" || gameState === "i_pre_n2" || gameState === "i_post_n2" || gameState === "i_pre_n3") {
+    try { if (e) e.preventDefault(); } catch(_e){}
+    if (!interstitialCanAdvance()) return true;
+
+    if (gameState === "i_post_n1") { enterInterstitial("i_pre_n2"); return true; }
+    if (gameState === "i_pre_n2")  { startNight(2); return true; }
+    if (gameState === "i_post_n2") { enterInterstitial("i_pre_n3"); return true; }
+    if (gameState === "i_pre_n3")  { startNight(3); return true; }
+  }
+
+  return false;
+}
+function handleRestartInput(e){
+  try { if (e) e.preventDefault(); } catch(_e){}
+
+  // If game is finished, go back to title screen (mobile-friendly)
+  if (gameState === "win" || gameState === "lose") {
+
+    // Stop audio loops safely
+    try { stopBenjiWake(); } catch(_e) {}
+    try { stopSnoreLoop(); } catch(_e) {}
+    try { snoreOn = false; } catch(_e) {}
+
+    // Reset gameplay variables (but do NOT stay in play)
+    reset();
+
+    // Force true menu state (avoid "play" state while showing start UI)
+    gameState = "start";
+
+    // Switch UI properly back to Start screen
+    if (typeof setUiOverlay === "function") setUiOverlay(null);
+    if (typeof setUiScreen === "function") setUiScreen("start");
+
+    // If the player hasn't clicked it this session, pulse the "Who is Suss" button
+    if (typeof pulseWhoIsSuss === "function" && !whoClicked) pulseWhoIsSuss();
+
+    return true;
+  }
+
+  // Mid-game restart (desktop convenience)
+  reset();
+  return true;
+}
+
+const keys = {};
+window.addEventListener('keydown', (e) => {
+  if (typeof rotateGateActive !== 'undefined' && rotateGateActive) return;
+  // Dev-only debug toggle (hitboxes/bounds). Debug is OFF by default.
+  if (e.key === "d" || e.key === "D") {
+    debug = !debug;
+    if (DEBUG_TOAST) {
+      const t = document.getElementById("debugToast");
+      if (t) {
+        t.style.display = "block";
+        t.textContent = debug ? "DEBUG: ON" : "DEBUG: OFF";
+        setTimeout(()=>{ try{ t.style.display = "none"; }catch(_e){} }, 900);
+      }
+    }
+    return;
+  }
+
+
+  // Block gameplay controls while not in active play (start screen / modals).
+  // UI buttons handle clicks; ESC is handled separately.
+  if (typeof isGameplayUIActive === "function" && !isGameplayUIActive()) {
+    return;
+  }
+
+
+  // ----- CONTINUE / ADVANCE (moments + interstitials) -----
+  if (handleContinueInput(e)) return;
+
+
+
+  // ----- NORMAL INPUT -----
+  keys[e.key] = true;
+// Night 3: after phone is dismissed, Benji appears after 3–5 keydowns (any key)
+if (gameState === "play" && night === 3 && !moment && benjiPending && benjiKeysLeft > 0) {
+  benjiKeysLeft--;
+  if (benjiKeysLeft <= 0) {
+    benjiPending = false;
+    interact.benji.active = true;
+    benjiStartTime = performance.now();
+    startBenjiWake();
+  }
+}
+
+  if (e.key === "Shift" && !e.repeat) {
+    hopRequested = true;
+  }
+
+
+  if(e.key === " "){
+    e.preventDefault();
+    tryAction();
+  }
+if(e.key.toLowerCase() === "d"){
+  debug = !debug;
+  showHint(debug ? "Debug ON (hitboxes visible)." : "Debug OFF.");
+}
+
+if (e.key && e.key.toLowerCase() === "r") {
+  handleRestartInput(e);
+  return;
+}
+
+
+}, {passive:false});
+
+window.addEventListener('keyup', (e) => { keys[e.key] = false; });
+
+  document.querySelectorAll('.btn').forEach(b=>{
+    const m = b.dataset.m;
+    if(!m) return;
+    const down = (e)=>{ e.preventDefault(); keys[m]=true; };
+    const up   = (e)=>{ e.preventDefault(); keys[m]=false; };
+    b.addEventListener('pointerdown', down);
+    b.addEventListener('pointerup', up);
+    b.addEventListener('pointercancel', up);
+    b.addEventListener('pointerleave', up);
+  });
+  doBtn.addEventListener('click', (e)=>{ try{ e.stopPropagation(); }catch(_e){} fireDoActionFromBtn(e); });
+  // Touch/Pointer safety: prevent double-trigger on mobile (click + touch + pointer) while keeping mechanics unchanged.
+  let lastDoActionStamp = 0;
+  function fireDoActionFromBtn(e){
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const type = e && e.type ? e.type : '';
+    if (isCoarsePointer()){
+      // On touch devices, only accept the *press* event and ignore paired/up events.
+      if (type && type !== 'pointerdown' && type !== 'touchstart') return;
+      if (now - lastDoActionStamp < 250) return;
+      lastDoActionStamp = now;
+      tryAction();
+      return;
+    }
+    // Desktop: click is primary. Pointerdown is allowed for non-mouse pointers.
+    if (type === 'click' || type === 'pointerdown'){
+      tryAction();
+    }
+  }
+  doBtn.addEventListener('pointerdown', (e)=>{ e.preventDefault(); e.stopPropagation(); fireDoActionFromBtn(e); }, {passive:false});
+  doBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); fireDoActionFromBtn(e); }, {passive:false});
+
+
+  const wrap = document.getElementById("wrap");
+  // Tap anywhere to continue (stamps/moments/interstitials) on touch devices
+// Tap anywhere to continue (moments/interstitials + win/lose)
+const onWrapContinue = (e) => {
+
+  // Win/Lose: tap anywhere returns to menu (mobile-friendly restart)
+  if (gameState === "win" || gameState === "lose") {
+    e.preventDefault();
+    e.stopPropagation();
+    handleRestartInput(e);
+    return;
+  }
+
+  // Moments / interstitial screens
+  if (momentPhase === "hold" || gameState === "i_post_n1" || gameState === "i_pre_n2" || gameState === "i_post_n2" || gameState === "i_pre_n3") {
+    e.preventDefault();
+    e.stopPropagation();
+    handleContinueInput(e);
+  }
+};
+
+wrap.addEventListener("pointerdown", onWrapContinue, { passive:false });
+wrap.addEventListener("touchstart", onWrapContinue, { passive:false });
+
+
+  if (typeof restartBtn !== 'undefined' && restartBtn) {
+    const onRestart = (e)=>{ e.preventDefault(); e.stopPropagation(); handleRestartInput(e); };
+    restartBtn.addEventListener("click", onRestart);
+    restartBtn.addEventListener("pointerdown", onRestart, {passive:false});
+    restartBtn.addEventListener("touchstart", onRestart, {passive:false});
+  }
+
+
+  const cam = { x:0, y:0 };
+  function updateCamera(){
+    return { sx: 0, sy: 0 };
+  }
+
+  function draw(){
+
+// ----- Moment overlay (teeth / phone) -----
+if (moment && (momentPhase === "hold" || momentPhase === "fadeOut")) {
+  let img = null;
+
+  if (moment === "teeth" && teethReady) img = teethImg;
+  else if (moment === "phone" && phoneReady) img = phoneImg;
+  else if (moment === "benji" && benjiMomentReady) img = benjiMomentImg;
+
+  // If the moment image is missing, fail gracefully.
+  if (!img) {
+    ctx.fillStyle = "#001018";
+    ctx.fillRect(0, 0, viewW, viewH);
+    ctx.fillStyle = "#e7eefc";
+    ctx.textAlign = "center";
+    ctx.font = "800 18px system-ui";
+    ctx.fillText("Missing moment image. Press any key to continue.", viewW / 2, viewH / 2);
+    ctx.textAlign = "left";
+    return;
+  }
+
+  const iw = img.naturalWidth || 1536;
+  const ih = img.naturalHeight || 1024;
+
+  const baseScale = Math.min(viewW / iw, viewH / ih);
+  const s = baseScale * (moment === "benji" ? 0.32 : 0.5);
+  const dw = iw * s, dh = ih * s;
+
+  const margin = 20; // distance from the edge
+  const dx = (moment === "phone") ? (viewW - dw - margin) : margin;
+  const dy = margin;
+
+  ctx.save();
+  ctx.globalAlpha = momentAlpha;
+  ctx.drawImage(img, dx, dy, dw, dh);
+  ctx.restore();
+
+  return; // stop normal drawing while moment is up
+}
+
+// --- Night interstitial screens (4 screens + delayed prompt) ---
+if (gameState === "i_post_n1") {
+  drawInterstitial(
+    "Night 1: Success!",
+    ["But you woke up with bad breath", "and a dead phone."],
+    interstitialCanAdvance()
+  );
+  return;
+}
+
+if (gameState === "i_pre_n2") {
+  drawInterstitial(
+    "Night 2",
+    ["Brush your teeth and", "charge your phone before bed."],
+    interstitialCanAdvance()
+  );
+  return;
+}
+
+if (gameState === "i_post_n2") {
+  drawInterstitial(
+    "Night 2: Success!",
+    ["Now you’ve got it."],
+    interstitialCanAdvance()
+  );
+  return;
+}
+
+if (gameState === "i_pre_n3") {
+  drawInterstitial(
+    "Night 3",
+    ["What could go wrong?"],
+    interstitialCanAdvance()
+  );
+  return;
+}
+
+ctx.clearRect(0, 0, viewW, viewH);
+if (gameState === "lose") {
+  if (failReady) {
+    // Cover scaling: fill screen, crop if needed
+    const iw = failImg.naturalWidth || 1536;
+    const ih = failImg.naturalHeight || 1024;
+    const s = Math.max(viewW / iw, viewH / ih);
+    const dw = iw * s, dh = ih * s;
+    const dx = (viewW - dw) / 2;
+    const dy = (viewH - dh) / 2;
+    ctx.drawImage(failImg, dx, dy, dw, dh);
+
+
+  } else {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, viewW, viewH);
+  }
+
+  // Restart hint (single version)
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.fillRect(0, viewH - 70, viewW, 70); 
+const loseHint = (typeof isCoarsePointer === "function" && isCoarsePointer())
+  ? "Tap to return to menu"
+  : "Press R to return to menu";
+ctx.fillText(loseHint, viewW / 2, viewH - 28);
+  ctx.fillStyle = "#e7eefc";
+  ctx.font = "800 18px system-ui";
+  ctx.textAlign = "center";
+  
+  ctx.textAlign = "left";
+
+  return;
+}
+if (gameState === "win") {
+  if (winReady) {
+    // Cover scaling: fill screen, crop if needed
+    const iw = winImg.naturalWidth || 1536;
+    const ih = winImg.naturalHeight || 1024;
+    const s = Math.max(viewW / iw, viewH / ih);
+    const dw = iw * s, dh = ih * s;
+    const dx = (viewW - dw) / 2;
+    const dy = (viewH - dh) / 2;
+    ctx.drawImage(winImg, dx, dy, dw, dh);
+  } else {
+    ctx.fillStyle = "#001018";
+    ctx.fillRect(0, 0, viewW, viewH);
+  }
+
+  // Restart hint
+  ctx.fillStyle = "rgba(0,0,0,0.30)";
+  ctx.fillRect(0, viewH - 70, viewW, 70);
+
+  ctx.fillStyle = "#e7eefc";
+  ctx.font = "800 18px system-ui";
+  ctx.textAlign = "center";
+const winHintTail = (typeof isCoarsePointer === "function" && isCoarsePointer())
+  ? "Tap to return to menu"
+  : "Press R to return to menu";
+ctx.fillText(`YOU WIN — ${winHintTail}`, viewW / 2, viewH - 28);
+
+  ctx.textAlign = "left";
+
+  return;
+}
+    const scale = Math.min(viewW / world.w, viewH / world.h);
+    const baseX = (viewW - world.w * scale) / 2;
+    const baseY = (viewH - world.h * scale) / 2;
+    const shift = updateCamera();
+    const worldW = world.w * scale;
+    const worldH = world.h * scale;
+    let ox = baseX + shift.sx;
+    let oy = baseY + shift.sy;
+    const minOx = viewW - worldW;
+    const maxOx = 0; 
+    const minOy = viewH - worldH;
+    const maxOy = 0;
+    if (worldW <= viewW) ox = baseX;
+    else ox = Math.max(minOx, Math.min(maxOx, ox));
+
+if (worldH <= viewH) oy = baseY;
+else oy = Math.max(minOy, Math.min(maxOy, oy));
+   
+    if(bgReady){ ctx.drawImage(bg, ox, oy, world.w * scale, world.h * scale); }
+
+// --- Benji (Night 3) in-world sprite ---
+if (
+  night === 3 &&
+  interact.benji &&
+  interact.benji.active &&
+  !interact.benji.done &&
+  benjiReady
+) {
+const z = interact.benji;
+
+// Size: scale Benji relative to his interaction box height
+const scaleDown = 0.80;                 // smaller = smaller Benji (try 0.70–0.90)
+const dh = (z.h * scale) * scaleDown;
+
+// Preserve aspect ratio
+const aspect = (benjiImg.naturalWidth || 1) / (benjiImg.naturalHeight || 1);
+const dw = dh * aspect;
+
+// Anchor Benji to bottom-center of the interaction rect
+const bx = ox + (z.x + z.w / 2) * scale;
+const by = oy + (z.y + z.h) * scale;
+
+const dx = bx - dw / 2;
+const dy = by - dh;
+
+ctx.drawImage(benjiImg, dx, dy, dw, dh);
+
+}
+
+
+    if(debug){
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,.25)"; ctx.lineWidth = 2;
+      for(const o of obstacles){ ctx.strokeRect(ox + o.x*scale, oy + o.y*scale, o.w*scale, o.h*scale); }
+      ctx.strokeStyle = "rgba(87,209,141,.55)";
+      for(const k of Object.keys(interact)){ const z = interact[k]; if(!z.done) ctx.strokeRect(ox + z.x*scale, oy + z.y*scale, z.w*scale, z.h*scale); }
+      ctx.fillStyle = "rgba(243,176,43,.95)";
+      ctx.beginPath(); ctx.arc(ox + player.x*scale, oy + player.y*scale, 4, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+
+    const px = ox + player.x * scale, py = oy + player.y * scale;
+    const dw = JAMIE_W * scale, dh = JAMIE_H * scale;
+    const dx = px - dw * JAMIE_FOOT_X, dy = py - dh * JAMIE_FOOT_Y;
+    if(jamieReady){ ctx.drawImage(jamieImg, dx, dy, dw, dh); }
+
+    if(fgReady){ ctx.drawImage(fg, ox, oy, world.w * scale, world.h * scale); }
+  }
+// ---------- AUDIO (Step 1: Snore only) ----------
+let audioCtx = null;
+let snoreOn = false;
+
+// Snore loop (MP3): plays continuously during gameplay
+let snoreAudio = null;
+let snorePlaying = false;
+
+function initSnoreAudio(){
+  if (snoreAudio) return;
+  snoreAudio = new Audio("snore_loop.mp3");
+  snoreAudio.loop = true;
+  snoreAudio.preload = "auto";
+  snoreAudio.volume = SNORE_VOLUME;
+}
+
+function startSnoreLoop(){
+  initSnoreAudio();
+  if (!snoreAudio || snorePlaying) return;
+  snoreAudio.currentTime = 0;
+  const p = snoreAudio.play();
+  if (p && p.catch) p.catch(() => {});
+  snorePlaying = true;
+}
+
+function stopSnoreLoop(){
+  if (!snoreAudio) return;
+  try { snoreAudio.pause(); snoreAudio.currentTime = 0; } catch(e) {}
+  snorePlaying = false;
+}
+// Lose SFX (MP3): plays once on loss
+let loseAudio = null;
+
+function initLoseAudio(){
+  if (loseAudio) return;
+  loseAudio = new Audio("lose_stinger.mp3");
+  loseAudio.loop = false; 
+  loseAudio.preload = "auto";
+  loseAudio.volume = 0.9; // tune
+}
+
+
+
+
+// Benji wake SFX (MP3): loops while Benji is active; volume ramps up over time
+let benjiWakeAudio = null;
+let benjiWakePlaying = false;
+
+function initBenjiWakeAudio(){
+  if (benjiWakeAudio) return;
+  benjiWakeAudio = new Audio("benji_wake.mp3");
+  benjiWakeAudio.loop = true;
+  benjiWakeAudio.preload = "auto";
+  benjiWakeAudio.volume = 0;
+}
+
+function startBenjiWake(){
+  initBenjiWakeAudio();
+  initFootsteps();
+    initSuccessSfx();
+
+  // Warm-up success SFX (silent) so they can play later (iOS/Safari gesture policy)
+  try {
+    if (successSfx) {
+      for (const k of Object.keys(successSfx)) {
+        const pool = successSfx[k];
+        if (pool && pool.items && pool.items[0]) warmupAudioElement(pool.items[0]);
+      }
+    }
+  } catch(e) {}
+
+    // warm up success SFX so they can play later (iOS/Safari gesture policy)
+    if (successSfx) {
+      for (const k of Object.keys(successSfx)) {
+        const pool = successSfx[k];
+        if (pool && pool.items && pool.items[0]) warmupAudioElement(pool.items[0]);
+      }
+    }
+  if (!benjiWakeAudio || benjiWakePlaying) return;
+  benjiWakeAudio.currentTime = 0;
+  // start quiet; loop will adjust volume
+  benjiWakeAudio.volume = 0.12;
+  const p = benjiWakeAudio.play();
+  if (p && p.catch) p.catch(() => {});
+  benjiWakePlaying = true;
+}
+
+function stopBenjiWake(){
+  if (!benjiWakeAudio) return;
+  benjiWakeAudio.pause();
+  benjiWakeAudio.currentTime = 0;
+  benjiWakePlaying = false;
+}
+
+function ensureAudio(){
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+}
+
+function startSnore(){
+  if (snoreOn) return;
+
+  // WebAudio is still used for "bump" and other synthetic SFX
+  ensureAudio();
+
+  // HTMLAudio elements (must be unlocked by a gesture in many browsers)
+  initBenjiWakeAudio();
+  initFootsteps();
+  initSuccessSfx();
+  initSnoreAudio();
+
+  // Warm-up attempt (iOS Safari can require a gesture before HTMLAudio can play)
+  try {
+    const a0 = footstepPool && footstepPool[0];
+    if (a0){
+      a0.volume = 0;
+      const p0 = a0.play();
+      if (p0 && p0.then) p0.then(() => { a0.pause(); a0.currentTime = 0; a0.volume = FOOTSTEP_VOLUME; }).catch(() => {});
+    }
+  } catch(e) {}
+
+  // Warm-up Benji loop (silent)
+  try {
+    if (benjiWakeAudio){
+      benjiWakeAudio.volume = 0;
+      const p1 = benjiWakeAudio.play();
+      if (p1 && p1.then) p1.then(() => { benjiWakeAudio.pause(); benjiWakeAudio.currentTime = 0; benjiWakeAudio.volume = 0; }).catch(() => {});
+    }
+  } catch(e) {}
+
+  // Warm-up snore loop (silent), then start it for real
+  try {
+    if (snoreAudio){
+      snoreAudio.volume = 0;
+      const p2 = snoreAudio.play();
+      if (p2 && p2.then) p2.then(() => { snoreAudio.pause(); snoreAudio.currentTime = 0; snoreAudio.volume = SNORE_VOLUME; startSnoreLoop(); }).catch(() => { startSnoreLoop(); });
+      else startSnoreLoop();
+    } else {
+      startSnoreLoop();
+    }
+  } catch(e) {
+    startSnoreLoop();
+  }
+
+  snoreOn = true;
+}
+
+
+// iOS/iPadOS: audio must start from a gesture.
+// We'll start snore on first click/tap/keydown.
+
+// --- Footstep SFX (MP3/WAV sample-based; avoids "heartbeat" tone) ---
+const FOOTSTEP_INTERVAL_MIN = 0.32;
+const FOOTSTEP_INTERVAL_MAX = 0.48;
+const SNORE_VOLUME = 0.07;
+const FOOTSTEP_VOLUME = 0.38;
+const SUCCESS_SFX_VOLUME = 0.55;
+
+// Snore starts only when the user clicks START (not on first tap anywhere).
+let stepTimer = 0;
+let wasMoving = false;
+
+let footstepPool = null;
+let footstepPoolIdx = 0;
+
+
+// ---------- AUDIO: Success stingers (achievement SFX) ----------
+
+function checkAudioAsset(url){
+  // Best-effort: logs a warning in console if asset cannot be fetched.
+  try{
+    fetch(url, {method:'HEAD'}).then(r=>{ if(!r.ok) console.warn('Audio asset missing or blocked:', url, r.status); }).catch(()=>{});
+  }catch(e){}
+}
+
+let successSfx = null;
+
+function makeAudioPool(src, count=2){
+  const items = [];
+  for(let i=0;i<count;i++){
+    const a = new Audio(src);
+    a.preload = "auto";
+    items.push(a);
+  }
+  return { items, i: 0 };
+}
+
+function initSuccessSfx(){
+  if(successSfx) return;
+  checkAudioAsset('success_teeth.mp3');
+  checkAudioAsset('success_phone.mp3');
+  checkAudioAsset('success_benji.mp3');
+  checkAudioAsset('success_bed.mp3');
+  successSfx = {
+    sink:  makeAudioPool("success_teeth.mp3", 2),
+    phone: makeAudioPool("success_phone.mp3", 2),
+    benji: makeAudioPool("success_benji.mp3", 2),
+    bed:   makeAudioPool("success_bed.mp3", 2),
+  };
+}
+
+function playSuccessSfx(key){
+  if (gameState !== "play") return;  // <-- ADD THIS
+  if(!successSfx || !successSfx[key]) return;
+  const pool = successSfx[key];
+  const a = pool.items[pool.i];
+  pool.i = (pool.i + 1) % pool.items.length;
+
+  try{
+    a.pause();
+    a.currentTime = 0;
+    a.volume = SUCCESS_SFX_VOLUME;
+    a.playbackRate = 0.95 + Math.random() * 0.1;
+    a.play().catch(()=>{});
+  } catch(e){}
+}
+
+
+
+function stopAllSuccessSfx(){
+  // Defensive: this function may be called before successSfx is initialized (TDZ).
+  try{
+    if(!successSfx) return;
+    for(const k of Object.keys(successSfx)){
+      const pool = successSfx[k];
+      for(const a of pool.items){
+        try{ a.pause(); a.currentTime = 0; }catch(e){}
+      }
+    }
+  } catch(e){
+    // Ignore early-call ReferenceErrors.
+    return;
+  }
+}
+
+function warmupAudioElement(a){
+  // Best-effort iOS/Safari unlock: play muted briefly within a user gesture.
+  try{
+    const prevVol = a.volume;
+    a.volume = 0;
+    const p = a.play();
+    if(p && p.then){
+      p.then(()=>{
+        a.pause();
+        a.currentTime = 0;
+        a.volume = prevVol;
+      }).catch(()=>{ a.volume = prevVol; });
+    } else {
+      a.pause();
+      a.currentTime = 0;
+      a.volume = prevVol;
+    }
+  } catch(e){}
+}
+
+function initFootsteps(){
+  if (footstepPool) return;
+  // Small pool so rapid steps can overlap slightly without cutting each other off
+  footstepPool = Array.from({length: 4}, () => {
+    const a = new Audio("footstep_soft.mp3"); // put file next to this HTML or adjust path
+    a.preload = "auto";
+    a.volume = FOOTSTEP_VOLUME * (0.85 + Math.random() * 0.3);
+    return a;
+  });
+}
+
+function playFootstepSample(){
+  if (!footstepPool) initFootsteps();
+  const a = footstepPool[footstepPoolIdx];
+  footstepPoolIdx = (footstepPoolIdx + 1) % footstepPool.length;
+
+  // Best-effort reset + subtle variety
+  try { a.pause(); a.currentTime = 0; } catch(e) {}
+  a.volume = FOOTSTEP_VOLUME;
+  a.playbackRate = 0.92 + Math.random() * 0.18;
+
+  const p = a.play();
+  if (p && p.catch) p.catch(() => {});
+}
+
+function playFootstep(){
+  // Legacy name used throughout the loop; now plays a sample-based footstep.
+  playFootstepSample();
+}
+let lastBumpAt = 0;
+
+function playBump(){
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  if (now - lastBumpAt < 0.18) return; // throttle so it doesn't machine-gun
+  lastBumpAt = now;
+
+  const t = now;
+
+  // Short "thunk": sine drop + tiny noise
+  const osc = audioCtx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(160 + Math.random()*30, t);
+  osc.frequency.exponentialRampToValueAtTime(90, t + 0.07);
+
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.20, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+
+  // tiny noise burst for texture
+  const nb = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.04), audioCtx.sampleRate);
+  const d = nb.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random()*2 - 1) * 0.25;
+
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = nb;
+
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 1200;
+
+  const ng = audioCtx.createGain();
+  ng.gain.setValueAtTime(0.0001, t);
+  ng.gain.exponentialRampToValueAtTime(0.12, t + 0.01);
+  ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+
+  osc.connect(g);
+  g.connect(audioCtx.destination);
+
+  noise.connect(lp);
+  lp.connect(ng);
+  ng.connect(audioCtx.destination);
+
+  osc.start(t);
+  osc.stop(t + 0.14);
+
+  noise.start(t);
+  noise.stop(t + 0.08);
+}
+function showMoment(kind){
+  if (gameState !== "play") return; // only trigger during play
+  moment = kind;                    // "teeth" or "phone"
+  momentPhase = "hold";
+  momentAlpha = 1;
+  momentCanDismiss = false;
+
+  // small delay so the same keypress that triggered the action
+  // doesn't instantly dismiss the panel
+  setTimeout(() => { momentCanDismiss = true; }, 180);
+}
+
+function dismissMoment(){
+  if (!moment || !momentCanDismiss) return;
+  stopAllSuccessSfx();
+
+  // Remember what we just dismissed (for Night 2 benji timing)
+  momentDismissedKind = moment;
+
+  momentPhase = "fadeOut";
+}
+
+let last = performance.now();
+function loop(t){
+  const dt = Math.min(0.033, (t - last) / 1000);
+  last = t;
+  // DEBUG: log state changes (temporary)
+if (!window.__stateLogged) window.__stateLogged = "";
+if (window.__stateLogged !== gameState) {
+console.log("GAME STATE:", gameState, "night:", night);
+  window.__stateLogged = gameState;
+}
+// Touch Play Again button visibility (show on win/lose)
+const IS_TOUCH = (("ontouchstart" in window) || (navigator.maxTouchPoints > 0));
+const showPlayAgain = false; // tap/click anywhere returns to menu; keep UI clean
+
+
+if (showPlayAgain) wrapEl.classList.remove("uiHidden");
+
+// Mark end screens so CSS can hide touch controls/HUD on win/lose
+try { document.body.classList.toggle('endScreen', (gameState === 'win' || gameState === 'lose')); } catch(_e) {}
+
+
+// Touch UI buttons visibility
+if (restartBtn) {
+  restartBtn.style.display = "none";
+  restartBtn.style.pointerEvents = "none";
+  restartBtn.style.opacity = "0";
+}
+if (doBtn) {
+  const showDo = IS_TOUCH && (gameState === "play") && !rotateGateActive;
+  doBtn.style.display = showDo ? "block" : "none";
+  doBtn.style.pointerEvents = showDo ? "auto" : "none";
+}
+
+// Touch UI buttons visibility
+if (restartBtn) {
+  restartBtn.style.display = "none";
+  restartBtn.style.pointerEvents = "none";
+  restartBtn.style.opacity = "0";
+}
+if (doBtn) {
+  const showDo = IS_TOUCH && (gameState === "play") && !rotateGateActive;
+  doBtn.style.display = showDo ? "block" : "none";
+  doBtn.style.pointerEvents = showDo ? "auto" : "none";
+}
+// Handle moment fade-out timing
+if (moment && momentPhase === "fadeOut") {
+  momentAlpha = Math.max(0, momentAlpha - dt / 0.25);
+
+  if (momentAlpha <= 0) {
+    moment = null;
+    momentPhase = "off";
+
+    // If we just dismissed the phone moment during Night 3,
+    // begin benji's delayed appearance
+    if (
+      night === 3 &&
+      momentDismissedKind === "phone" &&
+      interact.phone.done &&
+      !interact.benji.done
+    ) {
+      benjiPending = true;
+      benjiKeysLeft = 3 + Math.floor(Math.random() * 3); // 3..5 (desktop)
+      benjiAppearAt = performance.now() + (1200 + Math.random()*1200); // 1.2–2.4s (touch-friendly)
+    }
+
+    momentDismissedKind = null;
+    momentAlpha = 0;
+  }
+}
+
+if(gameState === "play" && isGameplayUIActive()){
+  
+// --- Benji delayed appearance (Night 3) ---
+  if (gameState === "play" && night === 3 && !moment && benjiPending && benjiAppearAt > 0 && performance.now() >= benjiAppearAt) {
+    benjiPending = false;
+    benjiAppearAt = 0;
+    interact.benji.active = true;
+    benjiStartTime = performance.now();
+    startBenjiWake();
+  }
+
+// --- Benji noise ramp (Night 3) ---
+  if (night === 3 && interact.benji && interact.benji.active && !interact.benji.done) {
+    const elapsed = Math.max(0, (performance.now() - benjiStartTime) / 1000);
+    const p = Math.min(1, elapsed / BENJI_RAMP_SECONDS);
+    const ratePerSec = BENJI_MAX_NOISE_PER_SEC * (p * p);
+    addNoise(ratePerSec * dt);
+
+    // Benji wake SFX volume ramp: gets louder the longer Benji is active
+    if (benjiWakeAudio) {
+      const vol = Math.min(1, 0.15 + 0.85 * (p * p));
+      benjiWakeAudio.volume = vol;
+      if (!benjiWakePlaying) startBenjiWake();
+    }
+  } else {
+    // Stop Benji wake sound as soon as Benji is settled or not present
+    if (benjiWakePlaying) stopBenjiWake();
+  }
+
+  if (moment) { 
+    stepTimer = 0; 
+  } 
+ else {
+
+  // cooldown timers
+  hopCooldownLeft = Math.max(0, hopCooldownLeft - dt);
+
+  // Read input direction
+  let ix = 0, iy = 0;
+
+  // Touch joystick (preferred on mobile)
+  if (typeof joyState !== "undefined" && joyState.active && joyState.mag > 0){
+    ix = joyState.ix;
+    iy = joyState.iy;
+  } else {
+    // Keyboard / on-screen arrows (desktop + fallback)
+    if(keys["ArrowUp"] || keys["up"]) iy -= 1;
+    if(keys["ArrowDown"] || keys["down"]) iy += 1;
+    if(keys["ArrowLeft"] || keys["left"]) ix -= 1;
+    if(keys["ArrowRight"] || keys["right"]) ix += 1;
+  }
+
+  // Update lastDir when there is directional input
+  if (ix !== 0 || iy !== 0) {
+    const ilen = Math.hypot(ix, iy) || 1;
+    lastDirX = ix / ilen;
+    lastDirY = iy / ilen;
+  }
+
+  // Start hop if requested and allowed
+  if (hopRequested) {
+    hopRequested = false;
+
+    if (hopCooldownLeft <= 0 && hopTimeLeft <= 0) {
+
+      // Hop direction: current input if held, else lastDir
+      let dx = lastDirX, dy = lastDirY;
+      if (ix !== 0 || iy !== 0) {
+        const ilen = Math.hypot(ix, iy) || 1;
+        dx = ix / ilen;
+        dy = iy / ilen;
+      }
+
+      const hopSpeed = HOP_DISTANCE / HOP_DURATION;
+      hopVX = dx * hopSpeed;
+      hopVY = dy * hopSpeed;
+
+      hopTimeLeft = HOP_DURATION;
+      hopCooldownLeft = HOP_COOLDOWN;
+
+      addNoise(HOP_NOISE);
+      playFootstep();
+    }
+  }
+
+  // Apply movement (hop takes priority)
+  let vx = 0, vy = 0;
+
+  if (hopTimeLeft > 0) {
+    hopTimeLeft = Math.max(0, hopTimeLeft - dt);
+    vx = hopVX * dt;
+    vy = hopVY * dt;
+  } else {
+    const len = Math.hypot(ix, iy) || 1;
+    const speedMult = (typeof joyState !== "undefined" && joyState.active) ? (0.25 + 0.75 * (joyState.mag || 0)) : 1;
+    vx = (ix / len) * player.speed * speedMult * dt;
+    vy = (iy / len) * player.speed * speedMult * dt;
+  }
+
+  const nx = player.x + vx, ny = player.y + vy;
+
+  if(!collides(nx, ny)){
+    player.x = Math.max(0, Math.min(world.w, nx));
+    player.y = Math.max(0, Math.min(world.h, ny));
+
+    const movingNow = (hopTimeLeft <= 0 && (vx !== 0 || vy !== 0));
+    if (movingNow && !wasMoving){
+      // Immediate feedback on movement start
+      playFootstep();
+      stepTimer = FOOTSTEP_INTERVAL_MIN + Math.random() * (FOOTSTEP_INTERVAL_MAX - FOOTSTEP_INTERVAL_MIN);
+    }
+    wasMoving = movingNow;
+
+    if (movingNow){
+      stepTimer -= dt;
+      if (stepTimer <= 0){
+        playFootstep();
+        stepTimer = FOOTSTEP_INTERVAL_MIN + Math.random() * (FOOTSTEP_INTERVAL_MAX - FOOTSTEP_INTERVAL_MIN);
+      }
+    } else if (hopTimeLeft <= 0) {
+      stepTimer = 0;
+    }
+
+  } else {
+    stepTimer = 0;
+    wasMoving = false;
+
+    if (hopTimeLeft > 0) {
+      hopTimeLeft = 0;
+      addNoise(HOP_BONK_NOISE);
+    } else if (vx !== 0 || vy !== 0){
+      addNoise(3);
+    }
+
+    playBump();
+  }
+
+}
+
+}
+
+// --- Benji HUD pill (Night 2 only) ---
+if (benjiPill) {
+  benjiPill.style.display =
+    (night === 3 &&
+     interact.benji &&
+     interact.benji.active &&
+     !interact.benji.done)
+      ? "inline-block"
+      : "none";
+}
+
+  updateObjectiveHint();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// Startup (must be OUTSIDE loop)
+setNoise(0);
+if (DEBUG_UI) showHint("Ready. Use bedroom_bg.png + bedroom_fg.png for layering. Press D for debug.");
+// Objective hint timing
+currentObjectiveHintKey = null;
+hintSuppressedUntil = performance.now() + HINT_INITIAL_DELAY_MS;
+
+// Duck snore slightly while moving so footsteps cut through (safe fallback)
+if (typeof isMoving !== 'undefined' && snoreAudio && !snoreAudio.paused) {
+  snoreAudio.volume = isMoving ? SNORE_VOLUME * 0.4 : SNORE_VOLUME;
+}
+
+requestAnimationFrame(loop);
+})();
+</script>
+</div>
+
+</body>
+</html>
