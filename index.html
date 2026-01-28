@@ -361,8 +361,13 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
   position:absolute;
   left:16px;
   bottom:16px;
+<<<<<<< HEAD
   width: 90px;
   height: 90px;
+=======
+  width: 110px;
+  height: 110px;
+>>>>>>> 60487e6f39443bb5ef8569659b123e285004fa33
   left: calc(12px + env(safe-area-inset-left));
   bottom: calc(12px + env(safe-area-inset-bottom));
   z-index:60;
@@ -371,10 +376,17 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
 }
 
 @media (min-width: 900px) and (pointer: coarse){
+<<<<<<< HEAD
   #joyZone{ width: 96px; height: 96px; }
 }
 @media (max-width: 520px) and (pointer: coarse){
   #joyZone{ width: 78px; height: 78px; }
+=======
+  #joyZone{ width: 110px; height: 110px; }
+}
+@media (max-width: 520px) and (pointer: coarse){
+  #joyZone{ width: 92px; height: 92px; }
+>>>>>>> 60487e6f39443bb5ef8569659b123e285004fa33
 }
 #joyBase{
   position:absolute;
@@ -398,7 +410,11 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
 }
 
 @media (pointer: coarse){
+<<<<<<< HEAD
   #joyStick{ width:38px; height:38px; margin-left:-19px; margin-top:-19px; }
+=======
+  #joyStick{ width:46px; height:46px; margin-left:-23px; margin-top:-23px; }
+>>>>>>> 60487e6f39443bb5ef8569659b123e285004fa33
 }
 
 /* Prefer joystick + fewer tiny buttons on touch devices */
