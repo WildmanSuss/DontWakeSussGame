@@ -636,6 +636,36 @@ body.endScreen .hud{ display:none !important; }
   #howToModal img#howToImg{
     max-height: 62vh;
   }
+  /* --- iPhone landscape: "Who is Suss" TV modal sizing --- */
+#tvModal .panelCard{
+  max-height: 92vh;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Scrollable content area (TV frame + screen) */
+#tvModal .tvWrap{
+  flex: 1 1 auto;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Footer button always visible */
+#tvModal .tvFooter{
+  flex: 0 0 auto;
+  padding-top: 10px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+}
+
+/* Scale down the TV content similarly to the how-to image */
+#tvModal img#tvFrame,
+#tvModal #tvScreen,
+#tvModal video#sussVideo{
+  max-height: 62vh;
+}
+
 }
 </style>
   <link rel="icon" href="data:,">
