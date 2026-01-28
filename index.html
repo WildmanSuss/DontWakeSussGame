@@ -1302,6 +1302,12 @@ if (noise >= 100) {
 
       if(rectHitPoint(player.x, player.y, z)){
 
+        // Night 1 is tutorial: only bed is actionable.
+        if (night === 1 && (k === "sink" || k === "phone")) {
+          showHint("Go to bed.");
+          return;
+        }
+
         // Bed has night-specific gating + win progression.
         if (k === "bed"){
           const msg = bedBlockMessage();
@@ -1453,6 +1459,45 @@ function startNight(n){
   hintTransientUntil = 0;
   hintSuppressedUntil = performance.now() + HINT_INITIAL_DELAY_MS;
 }
+
+// ----- Interstitial helpers (4 screens + delayed prompt) -----
+const INTERSTITIAL_PROMPT_DELAY_MS = 800;
+let interstitialShownAt = 0;
+
+function enterInterstitial(state){
+  gameState = state;
+  interstitialShownAt = performance.now();
+}
+
+function interstitialCanAdvance(){
+  return (performance.now() - interstitialShownAt) >= INTERSTITIAL_PROMPT_DELAY_MS;
+}
+
+function drawInterstitial(title, bodyLines, canAdvance){
+  ctx.fillStyle = "#001018";
+  ctx.fillRect(0, 0, viewW, viewH);
+
+  ctx.fillStyle = "#e7eefc";
+  ctx.textAlign = "center";
+
+  ctx.font = "900 44px system-ui";
+  ctx.fillText(title, viewW / 2, viewH / 2 - 60);
+
+  ctx.font = "800 20px system-ui";
+  const lineH = 26;
+  const startY = viewH / 2 - 10;
+  bodyLines.forEach((line, i) => {
+    ctx.fillText(line, viewW / 2, startY + i * lineH);
+  });
+
+  if (canAdvance){
+    ctx.font = "900 18px system-ui";
+    ctx.fillText("Tap to continue", viewW / 2, viewH / 2 + 90);
+  }
+
+  ctx.textAlign = "left";
+}
+
 function handleContinueInput(e){
   // Moment dismiss has priority
   if (momentPhase === "hold") {
@@ -1670,43 +1715,6 @@ if (moment && (momentPhase === "hold" || momentPhase === "fadeOut")) {
 }
 
 // --- Night interstitial screens (4 screens + delayed prompt) ---
-function drawInterstitial(title, bodyLines, canAdvance){
-  ctx.fillStyle = "#001018";
-  ctx.fillRect(0, 0, viewW, viewH);
-
-  ctx.fillStyle = "#e7eefc";
-  ctx.textAlign = "center";
-
-  ctx.font = "900 44px system-ui";
-  ctx.fillText(title, viewW / 2, viewH / 2 - 60);
-
-  ctx.font = "800 20px system-ui";
-  const lineH = 26;
-  const startY = viewH / 2 - 10;
-  bodyLines.forEach((line, i) => {
-    ctx.fillText(line, viewW / 2, startY + i * lineH);
-  });
-
-  if (canAdvance){
-    ctx.font = "900 18px system-ui";
-    ctx.fillText("Tap to continue", viewW / 2, viewH / 2 + 90);
-  }
-
-  ctx.textAlign = "left";
-}
-
-const INTERSTITIAL_PROMPT_DELAY_MS = 800;
-let interstitialShownAt = 0;
-
-function enterInterstitial(state){
-  gameState = state;
-  interstitialShownAt = performance.now();
-}
-
-function interstitialCanAdvance(){
-  return (performance.now() - interstitialShownAt) >= INTERSTITIAL_PROMPT_DELAY_MS;
-}
-
 if (gameState === "i_post_n1") {
   drawInterstitial(
     "Night 1: Success!",
@@ -1743,7 +1751,7 @@ if (gameState === "i_pre_n3") {
   return;
 }
 
-    ctx.clearRect(0, 0, viewW, viewH);
+ctx.clearRect(0, 0, viewW, viewH);
 if (gameState === "lose") {
   if (failReady) {
     // Cover scaling: fill screen, crop if needed
