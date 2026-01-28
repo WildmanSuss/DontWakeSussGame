@@ -446,6 +446,15 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
 </style>
   <link rel="icon" href="data:,">
 </head>
+  <div id="buildStamp">BUILD: PASS1 TEST — 2026-01-27</div>
+<style>
+  #buildStamp{
+    position:fixed; left:8px; top:8px; z-index:999999;
+    background:rgba(0,0,0,.75); color:#fff; padding:6px 8px;
+    font:12px/1.2 system-ui, -apple-system, Arial; border-radius:8px;
+    pointer-events:none;
+  }
+</style>
 <body>
 <div id="wrap" class="uiHidden">
   <canvas id="c"></canvas>
