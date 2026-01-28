@@ -1002,17 +1002,7 @@ const HINT_COPY = {
   const hint = document.getElementById('hint');
 const doBtn = document.getElementById('doBtn');
 restartBtn = document.getElementById('restartBtn');
-
-  function doPlayAgain(e){
-  if (e) { e.preventDefault(); e.stopPropagation(); }
-  reset();
-}
-
-if (restartBtn) {
-  restartBtn.addEventListener("click", doPlayAgain);
-  restartBtn.addEventListener("touchstart", doPlayAgain, { passive:false });
-  restartBtn.addEventListener("pointerdown", doPlayAgain, { passive:false });
-}
+  
   const benjiPill = document.getElementById('benjiPill');
 
   // Cached view size (avoid getBoundingClientRect() every frame on mobile)
@@ -1426,28 +1416,37 @@ function handleContinueInput(e){
 
   return false;
 }
-
 function handleRestartInput(e){
   try { if (e) e.preventDefault(); } catch(_e){}
 
-  // If game is finished, go back to title screen
+  // If game is finished, go back to title screen (mobile-friendly)
   if (gameState === "win" || gameState === "lose") {
-    reset();
 
     // Stop audio loops safely
     try { stopBenjiWake(); } catch(_e) {}
     try { stopSnoreLoop(); } catch(_e) {}
     try { snoreOn = false; } catch(_e) {}
 
+    // Reset gameplay variables (but do NOT stay in play)
+    reset();
+
+    // Force true menu state (avoid "play" state while showing start UI)
+    gameState = "start";
+
     // Switch UI properly back to Start screen
     if (typeof setUiOverlay === "function") setUiOverlay(null);
     if (typeof setUiScreen === "function") setUiScreen("start");
 
     // If the player hasn't clicked it this session, pulse the "Who is Suss" button
-    if (typeof pulseWhoIsSuss === "function") pulseWhoIsSuss();
+    if (typeof pulseWhoIsSuss === "function" && !whoClicked) pulseWhoIsSuss();
 
     return true;
   }
+
+  // Mid-game restart (desktop convenience)
+  reset();
+  return true;
+}
 
   // Mid-game restart
   reset();
@@ -1525,16 +1524,27 @@ window.addEventListener('keyup', (e) => { keys[e.key] = false; });
 
   const wrap = document.getElementById("wrap");
   // Tap anywhere to continue (stamps/moments/interstitials) on touch devices
-  const onWrapContinue = (e)=>{
-    // Only consume taps when a continue-able state is active
-    if (momentPhase === "hold" || gameState === "night1Success" || gameState === "night2Intro") {
-      e.preventDefault();
-      e.stopPropagation();
-      handleContinueInput(e);
-    }
-  };
-  wrap.addEventListener("pointerdown", onWrapContinue, {passive:false});
-  wrap.addEventListener("touchstart", onWrapContinue, {passive:false});
+// Tap anywhere to continue (moments/interstitials + win/lose)
+const onWrapContinue = (e) => {
+
+  // Win/Lose: tap anywhere returns to menu (mobile-friendly restart)
+  if (gameState === "win" || gameState === "lose") {
+    e.preventDefault();
+    e.stopPropagation();
+    handleRestartInput(e);
+    return;
+  }
+
+  // Moments / interstitial screens
+  if (momentPhase === "hold" || gameState === "night1Success" || gameState === "night2Intro") {
+    e.preventDefault();
+    e.stopPropagation();
+    handleContinueInput(e);
+  }
+};
+
+wrap.addEventListener("pointerdown", onWrapContinue, { passive:false });
+wrap.addEventListener("touchstart", onWrapContinue, { passive:false });
 
 
   if (typeof restartBtn !== 'undefined' && restartBtn) {
@@ -1643,11 +1653,14 @@ if (gameState === "lose") {
   // Restart hint (single version)
   ctx.fillStyle = "rgba(0,0,0,0.35)";
   ctx.fillRect(0, viewH - 70, viewW, 70); 
-
+const loseHint = (typeof isCoarsePointer === "function" && isCoarsePointer())
+  ? "Tap to return to menu"
+  : "Press R to return to menu";
+ctx.fillText(loseHint, viewW / 2, viewH - 28);
   ctx.fillStyle = "#e7eefc";
   ctx.font = "800 18px system-ui";
   ctx.textAlign = "center";
-  ctx.fillText("Press R to restart", viewW / 2, viewH - 28);
+  
   ctx.textAlign = "left";
 
   return;
@@ -1674,7 +1687,11 @@ if (gameState === "win") {
   ctx.fillStyle = "#e7eefc";
   ctx.font = "800 18px system-ui";
   ctx.textAlign = "center";
-  ctx.fillText("YOU WIN — Press R to play again", viewW / 2, viewH - 28);
+const winHintTail = (typeof isCoarsePointer === "function" && isCoarsePointer())
+  ? "Tap to return to menu"
+  : "Press R to return to menu";
+ctx.fillText(`YOU WIN — ${winHintTail}`, viewW / 2, viewH - 28);
+
   ctx.textAlign = "left";
 
   return;
