@@ -450,11 +450,18 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
 
 
 /* Mobile-friendly action button placement */
-@media (pointer: coarse){
-  .btns{ position:absolute; right:16px; bottom:16px; display:block; grid-template-columns: none; gap:0; }
+@media (pointer: coarse) and (orientation: landscape){
+  .btns{
+    right: 16px;
+    bottom: 8px;   /* half the space to bottom */
+  }
+
   #doBtn{
-    width:92px;
-    height:92px;
+    width: 68px;   /* 25% smaller than 92px */
+    height: 68px;
+    font-size: 13px;
+  }
+}
     border-radius:999px;
     padding:0;
     display:flex;
@@ -648,8 +655,8 @@ body.endScreen .hud{ display:none !important; }
     <button class="btn" data-m="left">◀</button>
     <button class="btn" data-m="right">▶</button>
     <button class="btn" data-m="down">▼</button>
-    <button class="btn action" id="doBtn">Do Action</button>
-    <button class="btn util" id="restartBtn">Play Again</button>
+    <button class="btn action" id="doBtn">Action</button>
+    <button class="btn util" id="restartBtn">Try Again</button>
   </div>
   <div class="panel hint" id="hint" style="display:none">Loading… Put <b>bedroom_bg.png</b>, <b>bedroom_fg.png</b>, and <b>Jamie.png</b> in the same folder.</div>
 
