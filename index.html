@@ -2099,6 +2099,13 @@ let last = performance.now();
 function loop(t){
   const dt = Math.min(0.033, (t - last) / 1000);
   last = t;
+  // DEBUG: log state changes (temporary)
+if (!window.__stateLogged) window.__stateLogged = "";
+if (window.__stateLogged !== gameState) {
+console.log("GAME STATE:", gameState, "night:", night);
+  window.__stateLogged = gameState;
+}
+
 
 // Handle moment fade-out timing
 if (moment && momentPhase === "fadeOut") {
