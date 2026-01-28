@@ -1,4 +1,10 @@
 <!doctype html>
+<!--
+PASS 1 (Mobile UX + stability) changes:
+- Added forced landscape rotate gate overlay (#rotateOverlay) + JS gate (updateRotateGate/setRotateGate) and blocked gameplay updates/input while portrait on touch devices (loop(), tryAction(), keydown, joystick handlers).
+- Reduced joystick size for touch devices (#joyZone/#joyStick CSS) and moved hint panel to top on touch to avoid overlapping the DO button.
+- Added initial updateRotateGate() call during startup.
+-->
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -18,29 +24,6 @@
     #doBtn{ pointer-events:auto; }
     .btn { width:54px; height:54px; border-radius:12px; border:1px solid rgba(255,255,255,.18); background:rgba(0,0,0,.45); color:#e7eefc; font-size:14px; font-weight:800; touch-action:none; }
     .btn.action { grid-column: 1 / span 3; height:56px; }
-
-    /* --- PASS 1: mobile control layout tuning (coarse pointers) --- */
-    @media (pointer: coarse){
-      .btns{
-        right: 12px;
-        bottom: 16px;
-        grid-template-columns: repeat(3, 46px);
-        gap: 8px;
-      }
-      .btn{ width:46px; height:46px; border-radius: 12px; font-size: 13px; }
-      .btn.action{ height:50px; }
-      .hint{ bottom: 140px; max-width: min(62%, 640px); }
-      .hud{ inset:auto 12px 12px 12px; }
-    }
-
-    /* Extra-tight phones */
-    @media (pointer: coarse) and (max-width: 520px){
-      .hint{ bottom: 160px; max-width: min(58%, 560px); }
-      .btns{ grid-template-columns: repeat(3, 44px); }
-      .btn{ width:44px; height:44px; }
-      .btn.action{ height:48px; }
-    }
-
     .hint { position:absolute; left:12px; bottom:90px; max-width:min(72%, 640px); pointer-events:none; }
     .topbar { position:absolute; top:12px; left:12px; right:12px; display:flex; justify-content:space-between; gap:10px; pointer-events:none; }
     .pill { background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.12); border-radius:999px; padding:8px 12px; font-weight:850; }
@@ -376,15 +359,15 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
   position:absolute;
   left:16px;
   bottom:16px;
-  width:140px;
-  height:140px;
+  width:130px;
+  height:130px;
   z-index:60;
   pointer-events:auto;
   touch-action:none;
 }
 
 @media (min-width: 900px) and (pointer: coarse){
-  #joyZone{ width:220px; height:220px; }
+  #joyZone{ width:160px; height:160px; }
 }
 #joyBase{
   position:absolute;
@@ -398,10 +381,10 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
   position:absolute;
   left:50%;
   top:50%;
-  width:64px;
-  height:64px;
-  margin-left:-32px;
-  margin-top:-32px;
+  width:50px;
+  height:50px;
+  margin-left:-25px;
+  margin-top:-25px;
   border-radius:999px;
   border:1px solid rgba(255,255,255,0.22);
   background: rgba(255,255,255,0.10);
@@ -434,21 +417,79 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
 }
 
 
+
+/* --- Forced landscape gate (touch devices) --- */
+#rotateOverlay{
+  position:absolute;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  gap:14px;
+  background:rgba(0,0,0,0.82);
+  z-index:9999;
+  text-align:center;
+  padding:24px;
+}
+#rotateOverlay .card{
+  max-width:520px;
+  background:rgba(10,18,34,0.92);
+  border:1px solid rgba(255,255,255,0.14);
+  border-radius:18px;
+  padding:18px 16px;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.55);
+}
+#rotateOverlay .icon{
+  font-size:44px;
+  line-height:1;
+}
+#rotateOverlay .title{
+  font-weight:900;
+  font-size:18px;
+  margin-bottom:6px;
+}
+#rotateOverlay .sub{
+  opacity:0.9;
+  font-size:14px;
+  line-height:1.35;
+}
+
     .btn.util { height:44px; font-size:14px; opacity:0.9; }
     /* Restart visibility controlled by JS (touch detection + game state) */
     #restartBtn { display:none; }
 
 
     @media (pointer:coarse) {
-      .btns { grid-template-columns: 1fr; right:14px; bottom:14px; gap:10px; width:170px; z-index:60; }
-      #doBtn { width:100%; height:64px; font-size:16px; }
+      .btns { grid-template-columns: 1fr; right:14px; bottom:14px; gap:10px; width:130px; z-index:60; }
+      #doBtn { width:100%; height:50px; font-size:16px; }
     }
+
+
+/* Keep hint/message UI away from the big DO button on touch devices */
+@media (pointer: coarse){
+  .hint{
+    bottom:auto;
+    top:72px;
+    max-width:calc(100% - 24px);
+    right:12px;
+  }
+}
+
 </style>
   <link rel="icon" href="data:,">
 </head>
 <body>
 <div id="wrap" class="uiHidden">
   <canvas id="c"></canvas>
+
+  <div id="rotateOverlay" aria-live="polite" aria-label="Rotate device message">
+    <div class="card">
+      <div class="icon">📱↻</div>
+      <div class="title">Rotate to landscape</div>
+      <div class="sub">This game plays best in landscape on iPhone/iPad.<br/>Rotate your device to continue.</div>
+    </div>
+  </div>
 
   <div id="joyZone" aria-label="Joystick"><div id="joyBase"><div id="joyStick"></div></div></div>
   <div class="topbar">
@@ -575,19 +616,13 @@ const HINT_COOLDOWN_MS = 1000;      // delay after completing an objective befor
 
 // Single place to edit hint copy:
 const HINT_COPY = {
-  // Night 1 (tutorial): bed only
+  n1_teeth: "Brush teeth at the sink.",
+  n1_phone: "Plug in your phone.",
   n1_bed:   "Go to bed.",
-
-  // Night 2: teeth + phone, then bed
+  n2_benji: "Settle Benji.",
   n2_teeth: "Brush teeth at the sink.",
   n2_phone: "Plug in your phone.",
   n2_bed:   "Go to bed.",
-
-  // Night 3: teeth + phone + Benji, then bed
-  n3_teeth: "Brush teeth at the sink.",
-  n3_phone: "Plug in your phone.",
-  n3_benji: "Settle Benji.",
-  n3_bed:   "Go to bed.",
 };
 
   // ---------- UI / SCREENS (Start, Instructions, Who is Suss TV) ----------
@@ -667,6 +702,7 @@ const HINT_COPY = {
   // Pointer Events (preferred)
   if (joyZoneEl){
     joyZoneEl.addEventListener("pointerdown", (e)=>{
+      if (typeof rotateGateActive !== "undefined" && rotateGateActive) return;
       if (!isCoarsePointer()) return;
       e.preventDefault();
       joyPointerId = e.pointerId;
@@ -681,6 +717,7 @@ const HINT_COPY = {
     }, { passive:false });
 
     joyZoneEl.addEventListener("pointermove", (e)=>{
+      if (typeof rotateGateActive !== "undefined" && rotateGateActive) return;
       if (!joyState.active) return;
       if (joyPointerId !== null && e.pointerId !== joyPointerId) return;
       e.preventDefault();
@@ -1034,6 +1071,36 @@ restartBtn = document.getElementById('restartBtn');
   
   const benjiPill = document.getElementById('benjiPill');
 
+
+  const rotateOverlay = document.getElementById('rotateOverlay');
+  let rotateGateActive = false;
+
+  function isCoarsePointer(){
+    try { return window.matchMedia && window.matchMedia('(pointer: coarse)').matches; }
+    catch(e){ return false; }
+  }
+  function isLandscape(){
+    return window.innerWidth >= window.innerHeight;
+  }
+  function setRotateGate(active){
+    rotateGateActive = active;
+    if (rotateOverlay) rotateOverlay.style.display = active ? 'flex' : 'none';
+    // If we enter rotate gate, cancel active touch joystick drags to prevent stuck movement.
+    if (active && typeof resetJoystick === 'function') resetJoystick();
+  }
+  function updateRotateGate(){
+    const shouldGate = isCoarsePointer() && !isLandscape();
+    if (shouldGate !== rotateGateActive) setRotateGate(shouldGate);
+  }
+
+  window.addEventListener('resize', () => { setTimeout(updateRotateGate, 0); }, { passive:true });
+  window.addEventListener('orientationchange', () => { setTimeout(updateRotateGate, 150); }, { passive:true });
+  if (window.visualViewport){
+    window.visualViewport.addEventListener('resize', () => { setTimeout(updateRotateGate, 0); }, { passive:true });
+  }
+
+
+
   // Cached view size (avoid getBoundingClientRect() every frame on mobile)
   let viewWCache = 0, viewHCache = 0;
   let viewW = 0, viewH = 0; // alias used by draw()
@@ -1075,24 +1142,18 @@ function computeObjectiveHintKey(){
   // Do not show during moment overlays.
   if (moment) return null;
 
-  // Night 1 tutorial: bed only.
   if (night === 1){
+    if (!interact.sink.done) return "n1_teeth";
+    if (!interact.phone.done) return "n1_phone";
     return "n1_bed";
   }
 
-  // Night 2: teeth + phone, then bed.
+  // Night 2
   if (night === 2){
+    if (interact.benji.active && !interact.benji.done) return "n2_benji";
     if (!interact.sink.done) return "n2_teeth";
     if (!interact.phone.done) return "n2_phone";
     return "n2_bed";
-  }
-
-  // Night 3: teeth + phone + Benji, then bed.
-  if (night === 3){
-    if (!interact.sink.done) return "n3_teeth";
-    if (!interact.phone.done) return "n3_phone";
-    if (!interact.benji.done) return "n3_benji";
-    return "n3_bed";
   }
 
   return null;
@@ -1285,6 +1346,7 @@ if (noise >= 100) {
   function collides(nx, ny){ for(const o of obstacles){ if(rectHitPoint(nx, ny, o)) return true; } return false; }
 
   function tryAction(){
+    if (typeof rotateGateActive !== "undefined" && rotateGateActive) return;
     if(gameState !== "play") return;
     for(const k of Object.keys(interact)){
       const z = interact[k];
@@ -1294,7 +1356,7 @@ if (noise >= 100) {
       if (!z.active) continue;
      }
       if(z.done) continue;
-      if(rectHitPoint(player.x, player.y, z, INTERACT_PAD)){
+      if(rectHitPoint(player.x, player.y, z)){
     z.done = true;
 addNoise(z.noise);
 
@@ -1322,7 +1384,7 @@ showHint(z.label);
         if(k === "bed"){
           if(interact.sink.done && interact.phone.done){
             // Night 2 gating: you cannot go to bed until Benji has been settled.
-            if (night === 3 && !interact.benji.done) {
+            if (night === 2 && !interact.benji.done) {
               z.done = false;
               addNoise(4);
               showHint("Settle Benji before going to bed.");
@@ -1485,6 +1547,7 @@ function handleRestartInput(e){
 
 const keys = {};
 window.addEventListener('keydown', (e) => {
+  if (typeof rotateGateActive !== 'undefined' && rotateGateActive) return;
 
   // Block gameplay controls while not in active play (start screen / modals).
   // UI buttons handle clicks; ESC is handled separately.
@@ -1500,8 +1563,8 @@ window.addEventListener('keydown', (e) => {
 
   // ----- NORMAL INPUT -----
   keys[e.key] = true;
-// Night 3: after phone is dismissed, benji appears after 3–5 keydowns (any key)
-if (gameState === "play" && night === 3 && !moment && benjiPending && benjiKeysLeft > 0) {
+// Night 2: after phone is dismissed, benji appears after 3–5 keydowns (any key)
+if (gameState === "play" && night === 2 && !moment && benjiPending && benjiKeysLeft > 0) {
   benjiKeysLeft--;
   if (benjiKeysLeft <= 0) {
     benjiPending = false;
@@ -1746,9 +1809,9 @@ else oy = Math.max(minOy, Math.min(maxOy, oy));
    
     if(bgReady){ ctx.drawImage(bg, ox, oy, world.w * scale, world.h * scale); }
 
-// --- Benji (Night 3) in-world sprite ---
+// --- Benji (Night 2) in-world sprite ---
 if (
-  night === 3 &&
+  night === 2 &&
   interact.benji &&
   interact.benji.active &&
   !interact.benji.done &&
@@ -2156,6 +2219,13 @@ let last = performance.now();
 function loop(t){
   const dt = Math.min(0.033, (t - last) / 1000);
   last = t;
+  updateRotateGate();
+  if (rotateGateActive){
+    // Freeze gameplay updates + block input while in portrait on touch devices.
+    draw();
+    requestAnimationFrame(loop);
+    return;
+  }
   // DEBUG: log state changes (temporary)
 if (!window.__stateLogged) window.__stateLogged = "";
 if (window.__stateLogged !== gameState) {
@@ -2190,7 +2260,7 @@ if (moment && momentPhase === "fadeOut") {
     // If we just dismissed the phone moment during Night 2,
     // begin benji's delayed appearance
     if (
-      night === 3 &&
+      night === 2 &&
       momentDismissedKind === "phone" &&
       interact.phone.done &&
       !interact.benji.done
@@ -2207,8 +2277,8 @@ if (moment && momentPhase === "fadeOut") {
 
 if(gameState === "play" && isGameplayUIActive()){
   
-// --- Benji delayed appearance (Night 3) ---
-  if (gameState === "play" && night === 3 && !moment && benjiPending && benjiAppearAt > 0 && performance.now() >= benjiAppearAt) {
+// --- Benji delayed appearance (Night 2) ---
+  if (gameState === "play" && night === 2 && !moment && benjiPending && benjiAppearAt > 0 && performance.now() >= benjiAppearAt) {
     benjiPending = false;
     benjiAppearAt = 0;
     interact.benji.active = true;
@@ -2216,8 +2286,8 @@ if(gameState === "play" && isGameplayUIActive()){
     startBenjiWake();
   }
 
-// --- Benji noise ramp (Night 3) ---
-  if (night === 3 && interact.benji && interact.benji.active && !interact.benji.done) {
+// --- Benji noise ramp (Night 2) ---
+  if (night === 2 && interact.benji && interact.benji.active && !interact.benji.done) {
     const elapsed = Math.max(0, (performance.now() - benjiStartTime) / 1000);
     const p = Math.min(1, elapsed / BENJI_RAMP_SECONDS);
     const ratePerSec = BENJI_MAX_NOISE_PER_SEC * (p * p);
@@ -2336,7 +2406,7 @@ if(gameState === "play" && isGameplayUIActive()){
       hopTimeLeft = 0;
       addNoise(HOP_BONK_NOISE);
     } else if (vx !== 0 || vy !== 0){
-      addNoise(2);
+      addNoise(3);
     }
 
     playBump();
@@ -2349,7 +2419,7 @@ if(gameState === "play" && isGameplayUIActive()){
 // --- Benji HUD pill (Night 2 only) ---
 if (benjiPill) {
   benjiPill.style.display =
-    (night === 3 &&
+    (night === 2 &&
      interact.benji &&
      interact.benji.active &&
      !interact.benji.done)
@@ -2363,6 +2433,8 @@ if (benjiPill) {
 }
 
 // Startup (must be OUTSIDE loop)
+updateRotateGate();
+
 setNoise(0);
 if (DEBUG_UI) showHint("Ready. Use bedroom_bg.png + bedroom_fg.png for layering. Press D for debug.");
 // Objective hint timing
