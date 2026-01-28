@@ -608,6 +608,14 @@ body.endScreen .hud{ display:none !important; }
   #joyStick{ width:28px; height:28px; margin-left:-14px; margin-top:-14px; }
   .hint{ top:54px !important; }
 }
+  @media (pointer: coarse) and (orientation: landscape) and (max-height: 450px){
+  #howToModal .panelCard{
+    padding: 10px;
+  }
+  #howToModal img#howToImg{
+    max-height: 88vh;
+  }
+}
 
 </style>
   <link rel="icon" href="data:,">
@@ -824,16 +832,23 @@ const HINT_COPY = {
     setJoyVisual(dx, dy);
   }
 
-  function isCoarsePointer(){
-    return window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
-  }
+function isCoarsePointer(){
+  return window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+}
+function isIPhoneLandscapeTouch(){
+  return (
+    isCoarsePointer() &&
+    window.matchMedia &&
+    window.matchMedia("(orientation: landscape)").matches &&
+    Math.min(window.innerWidth, window.innerHeight) <= 450
+  );
+}
 
-  function enableJoystickIfNeeded(){
-    if (!joyZoneEl) return;
-    // show/hide handled by CSS, but keep state clean
-    if (!isCoarsePointer()) resetJoy();
-  }
-
+function enableJoystickIfNeeded(){
+  if (!joyZoneEl) return;
+  // show/hide handled by CSS, but keep state clean
+  if (!isCoarsePointer()) resetJoy();
+}
   // Pointer Events (preferred)
   if (joyZoneEl){
     joyZoneEl.addEventListener("pointerdown", (e)=>{
@@ -2057,7 +2072,9 @@ if (gameState === "lose") {
     // Cover scaling: fill screen, crop if needed
     const iw = failImg.naturalWidth || 1536;
     const ih = failImg.naturalHeight || 1024;
-    const s = Math.max(viewW / iw, viewH / ih);
+   const s = isIPhoneLandscapeTouch()
+  ? Math.min(viewW / iw, viewH / ih)   // iPhone: contain (no crop)
+  : Math.max(viewW / iw, viewH / ih);  // others: cover (fill)
     const dw = iw * s, dh = ih * s;
     const dx = (viewW - dw) / 2;
     const dy = (viewH - dh) / 2;
@@ -2089,7 +2106,9 @@ if (gameState === "win") {
     // Cover scaling: fill screen, crop if needed
     const iw = winImg.naturalWidth || 1536;
     const ih = winImg.naturalHeight || 1024;
-    const s = Math.max(viewW / iw, viewH / ih);
+    const s = isIPhoneLandscapeTouch()
+  ? Math.min(viewW / iw, viewH / ih)   // iPhone: contain (no crop)
+  : Math.max(viewW / iw, viewH / ih);  // others: cover (fill)
     const dw = iw * s, dh = ih * s;
     const dx = (viewW - dw) / 2;
     const dy = (viewH - dh) / 2;
