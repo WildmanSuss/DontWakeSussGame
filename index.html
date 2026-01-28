@@ -361,15 +361,20 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
   position:absolute;
   left:16px;
   bottom:16px;
-  width: 130px;
-  height: 130px;
+  width: 90px;
+  height: 90px;
+  left: calc(12px + env(safe-area-inset-left));
+  bottom: calc(12px + env(safe-area-inset-bottom));
   z-index:60;
   pointer-events:auto;
   touch-action:none;
 }
 
 @media (min-width: 900px) and (pointer: coarse){
-  #joyZone{ width: 130px; height: 130px; }
+  #joyZone{ width: 96px; height: 96px; }
+}
+@media (max-width: 520px) and (pointer: coarse){
+  #joyZone{ width: 78px; height: 78px; }
 }
 #joyBase{
   position:absolute;
@@ -392,14 +397,48 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
   background: rgba(255,255,255,0.10);
 }
 
+@media (pointer: coarse){
+  #joyStick{ width:38px; height:38px; margin-left:-19px; margin-top:-19px; }
+}
+
 /* Prefer joystick + fewer tiny buttons on touch devices */
 @media (pointer: coarse) {
   #joyZone{ display:block; }
+  .hud .panel:nth-child(2){ display:none !important; }
+  .hud .panel.row .small{ display:none !important; }
   .btns > .btn[data-m="up"],
   .btns > .btn[data-m="down"],
   .btns > .btn[data-m="left"],
   .btns > .btn[data-m="right"]{ display:none; }
 }
+/* Touch landscape layout improvements (2026-01-27 fix4)
+   - Start screen background: use contain to avoid over-zoom on iPhone landscape
+   - Move Noise + hint UI to top in landscape on touch
+   - Further reduce joystick size for small screens
+*/
+@media (pointer: coarse) {
+  #startScreen .startBg{ background-size: contain; background-repeat:no-repeat; }
+}
+@media (pointer: coarse) and (orientation: landscape) {
+  /* Move Noise meter to top (below the top pills) */
+  .hud{
+    top: 62px;
+    left: 12px;
+    right: 12px;
+    bottom: auto;
+    grid-template-columns: 1fr;
+  }
+  /* Move hint/messages to top center */
+  .hint{
+    top: 124px;
+    bottom: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: min(92%, 760px);
+    text-align: center;
+  }
+}
+
 
 
 /* Mobile-friendly action button placement */
@@ -454,6 +493,14 @@ html, body { overscroll-behavior: none; touch-action: none; -webkit-user-select:
 #rotateOverlay .icon{ font-size:44px; line-height:1; }
 #rotateOverlay .title{ font-weight:900; font-size:18px; margin-bottom:6px; }
 #rotateOverlay .sub{ opacity:0.9; font-size:14px; line-height:1.35; }
+
+/* Touch end screens: hide touch controls + HUD to avoid clutter over win/lose art */
+body.endScreen #joyZone,
+body.endScreen #doBtn,
+body.endScreen .hud{ display:none !important; }
+
+/* Always hide the Play Again button (tap/click anywhere returns to menu) */
+#restartBtn{ display:none !important; }
 
 /* Touch controls: show joystick, hide desktop d-pad arrows */
 @media (pointer: coarse) {
@@ -1127,6 +1174,9 @@ window.addEventListener('orientationchange', () => { setTimeout(updateRotateGate
 if (window.visualViewport){
   window.visualViewport.addEventListener('resize', () => { setTimeout(updateRotateGate, 0); }, { passive:true });
 }
+
+// Run once on load so the rotate overlay shows immediately (even on the start screen)
+setTimeout(updateRotateGate, 0);
 
   // Cached view size (avoid getBoundingClientRect() every frame on mobile)
   let viewWCache = 0, viewHCache = 0;
@@ -2368,20 +2418,37 @@ console.log("GAME STATE:", gameState, "night:", night);
 }
 // Touch Play Again button visibility (show on win/lose)
 const IS_TOUCH = (("ontouchstart" in window) || (navigator.maxTouchPoints > 0));
-const showPlayAgain = IS_TOUCH && (gameState === "win" || gameState === "lose");
+const showPlayAgain = false; // tap/click anywhere returns to menu; keep UI clean
+
 
 if (showPlayAgain) wrapEl.classList.remove("uiHidden");
 
+// Mark end screens so CSS can hide touch controls/HUD on win/lose
+try { document.body.classList.toggle('endScreen', (gameState === 'win' || gameState === 'lose')); } catch(_e) {}
+
+
+// Touch UI buttons visibility
 if (restartBtn) {
-  restartBtn.style.display = showPlayAgain ? "block" : "none";
-  restartBtn.style.pointerEvents = showPlayAgain ? "auto" : "none";
-  restartBtn.style.opacity = showPlayAgain ? "1" : "0";
+  restartBtn.style.display = "none";
+  restartBtn.style.pointerEvents = "none";
+  restartBtn.style.opacity = "0";
+}
+if (doBtn) {
+  const showDo = IS_TOUCH && (gameState === "play") && !rotateGateActive;
+  doBtn.style.display = showDo ? "block" : "none";
+  doBtn.style.pointerEvents = showDo ? "auto" : "none";
 }
 
+// Touch UI buttons visibility
 if (restartBtn) {
-  restartBtn.style.display = showPlayAgain ? "block" : "none";
-  restartBtn.style.pointerEvents = showPlayAgain ? "auto" : "none";
-  restartBtn.style.opacity = showPlayAgain ? "1" : "0";
+  restartBtn.style.display = "none";
+  restartBtn.style.pointerEvents = "none";
+  restartBtn.style.opacity = "0";
+}
+if (doBtn) {
+  const showDo = IS_TOUCH && (gameState === "play") && !rotateGateActive;
+  doBtn.style.display = showDo ? "block" : "none";
+  doBtn.style.pointerEvents = showDo ? "auto" : "none";
 }
 // Handle moment fade-out timing
 if (moment && momentPhase === "fadeOut") {
