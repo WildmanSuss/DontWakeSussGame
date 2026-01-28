@@ -608,15 +608,35 @@ body.endScreen .hud{ display:none !important; }
   #joyStick{ width:28px; height:28px; margin-left:-14px; margin-top:-14px; }
   .hint{ top:54px !important; }
 }
-  @media (pointer: coarse) and (orientation: landscape) and (max-height: 450px){
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 450px){
+  /* Constrain modal to iPhone landscape height */
   #howToModal .panelCard{
+    max-height: 92vh;
     padding: 10px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
+
+  /* Scrollable content area (image + text) */
+  #howToModal .howToImgWrap{
+    flex: 1 1 auto;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Footer / back button always visible */
+  #howToModal .ctaRow{
+    flex: 0 0 auto;
+    padding-top: 10px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+
+  /* Image sizing */
   #howToModal img#howToImg{
     max-height: 88vh;
   }
 }
-
 </style>
   <link rel="icon" href="data:,">
 </head>
