@@ -644,28 +644,25 @@ body.endScreen .hud{ display:none !important; }
   flex-direction: column;
   overflow: hidden;
 }
-
-/* Scrollable content area (TV frame + screen) */
+}
+/* iPhone landscape: keep TV illusion by scaling the whole composite together */
 #tvModal .tvWrap{
   flex: 1 1 auto;
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+
+  transform-origin: top center;
+  transform: scale(0.78); /* tweak: 0.72–0.88 */
 }
 
-/* Footer button always visible */
+/* Keep footer/back button visible */
 #tvModal .tvFooter{
   flex: 0 0 auto;
   padding-top: 10px;
   padding-bottom: calc(10px + env(safe-area-inset-bottom));
 }
-
-/* Scale down the TV content similarly to the how-to image */
-#tvModal img#tvFrame,
-#tvModal #tvScreen,
-#tvModal video#sussVideo{
-  max-height: 62vh;
-}
-
 }
 </style>
   <link rel="icon" href="data:,">
