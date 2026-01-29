@@ -798,7 +798,7 @@ body.endScreen .hud{ display:none !important; }
 <script>
 const DEBUG_TOAST = false;
 
-function __main__(){
+(() => {
   const startScreen = document.getElementById("startScreen");
   if (startScreen) startScreen.classList.add("loading");
 
@@ -1171,15 +1171,6 @@ if (startBtnEl) startBtnEl.disabled = true;
     asset("fail.png"),
     asset("benji.png")
   ];
-
-  // Preload critical art, then enable Start
-  preloadImages(toPreload, () => {
-    startScreenEl.classList.remove("loading");
-    startBtnEl.disabled = false;
-  });
-})();
-
-
 
 
 
@@ -2908,12 +2899,15 @@ if (benjiPill) {
       : "none";
 }
 
-} // end gameplay UI gate
-
-
   updateObjectiveHint();
   draw();
-  requestAnimationFrame(loop);
+  preloadImages(
+  [BACKGROUND_SRC, FOREGROUND_SRC, JAMIE_SRC],
+  () => {
+    if (startScreen) startScreen.classList.remove("loading");
+    requestAnimationFrame(loop);
+  }
+);
 }
 
 // Startup (must be OUTSIDE loop)
@@ -2929,9 +2923,7 @@ if (typeof isMoving !== 'undefined' && snoreAudio && !snoreAudio.paused) {
 }
 
 requestAnimationFrame(loop);
-}
-}
-__main__();
+})();
 </script>
 </div>
 
