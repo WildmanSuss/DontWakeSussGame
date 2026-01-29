@@ -796,10 +796,11 @@ body.endScreen .hud{ display:none !important; }
 
 
 <script>
-  const DEBUG_TOAST = false;
+const DEBUG_TOAST = false;
+
 (() => {
   const startScreen = document.getElementById("startScreen");
-if (startScreen) startScreen.classList.add("loading");
+  if (startScreen) startScreen.classList.add("loading");
 
 function preloadImages(srcs, onDone) {
   let loaded = 0;
@@ -2889,7 +2890,7 @@ if(gameState === "play" && isGameplayUIActive()){
 
 }
 
-// --- Benji HUD pill (Night 2 only) ---
+// --- Benji HUD pill (Night 3 only) ---
 if (benjiPill) {
   benjiPill.style.display =
     (night === 3 &&
