@@ -61,8 +61,19 @@ position:absolute; inset:0;
 position:absolute; inset:0;
       background: linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.24));
     }
-    #startScreen .startUI { z-index:2;
-    #startScreen.loading .startUI {
+#startScreen .startUI {
+  z-index: 2;
+  position: relative;
+  width: min(760px, calc(100vw - 28px));
+  margin-top: 4vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+#startScreen.loading .startUI {
   opacity: 0;
   pointer-events: none;
 }
@@ -77,15 +88,6 @@ position:absolute; inset:0;
   font: 700 18px system-ui;
   z-index: 5;
 }
-
-                           
-
-      position:relative;
-      width:min(760px, calc(100vw - 28px));
-      margin-top: 4vh;
-      display:flex; flex-direction:column; align-items:center; gap:10px;
-      pointer-events:auto;
-    }
     #startScreen .startBtn {
       width: min(420px, 68vw);
       height: 74px;
