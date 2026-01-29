@@ -1010,6 +1010,8 @@ function enableJoystickIfNeeded(){
   const startScreenEl = document.getElementById("startScreen");
   const startBgEl = document.getElementById("startBg");
   const startBtnEl = document.getElementById("startBtn");
+  // Patch 3: keep Start disabled until core art is loaded (prevents iOS load-order glitches)
+if (startBtnEl) startBtnEl.disabled = true;
   const howToBtnEl = document.getElementById("howToBtn");
   const whoIsSussEl = document.getElementById("whoIsSuss");
 
@@ -1149,8 +1151,28 @@ function enableJoystickIfNeeded(){
     // If the asset is missing, it will just show the fallback background color.
     startBgEl.style.backgroundImage = `url('${START_SCREEN_BG_SRC}')`;
   })();
+  // Patch 3: preload start + core gameplay art before enabling Start / showing start UI
+(function preloadStartAndCoreArt(){
+  if (!startScreenEl || !startBtnEl) return;
 
-  
+  // Make sure we're visually in loading state until done
+  startScreenEl.classList.add("loading");
+  startBtnEl.disabled = true;
+
+  // Preload the images that cause the visible "pop-in" bugs on iOS Safari
+  const toPreload = [
+    START_SCREEN_BG_SRC,
+    BACKGROUND_SRC,
+    FOREGROUND_SRC,
+    JAMIE_SRC,
+    asset("teeth.png"),
+    asset("phone.png"),
+    asset("win.png"),
+    asset("fail.png"),
+    asset("benji.png")
+  ];
+
+
 
 
 // --- Touch landscape UI: place Noise meter between top pills ---
@@ -1492,27 +1514,27 @@ function updateObjectiveHint(){
   let teethReady = false;
   teethImg.onload = () => { teethReady = true; };
   teethImg.onerror = () => { teethReady = false; };
-  teethImg.src = "teeth.png";   
+  teethImg.src = asset("teeth.png";   
   const phoneImg = new Image();
   let phoneReady = false;
   phoneImg.onload = () => { phoneReady = true; };
 phoneImg.onerror = () => { phoneReady = false; showHint("Could not load phone.png"); };
-  phoneImg.src = "phone.png";  
+  phoneImg.src = asset("phone.png");  
   let failReady = false;
   failImg.onload = () => { failReady = true; };
 failImg.onerror = () => { failReady = false; showHint("Could not load fail.png"); };
-  failImg.src = "fail.png";
+  failImg.src = asset("fail.png");
   const winImg = new Image();
   let winReady = false;
   winImg.onload = () => { winReady = true; };
   winImg.onerror = () => { winReady = false; showHint("Could not load win.png"); };
-winImg.src = "win.png";
+winImg.src = asset("win.png");
 
   const startImg = new Image();
   let startReady = false;
   startImg.onload = () => { startReady = true; };
   startImg.onerror = () => { startReady = false; /* start screen still works via HTML bg */ };
-  startImg.src = "start_screen.png";
+  startImg.src = asset("start_screen.png");
 
 
 // --- benji (Night 3) assets ---
@@ -1523,7 +1545,7 @@ benjiImg.onerror = () => {
   benjiReady = false; 
   showHint("Could not load benji.png"); 
 };
-benjiImg.src = "benji.png";
+benjiImg.src = asset("benji.png");
 benjiImg._altTried = false;
 benjiImg.onerror = ()=>{
   if(benjiImg._altTried) return;
@@ -2151,7 +2173,21 @@ if (gameState === "i_pre_n3") {
   return;
 }
 
+// Patch 3C gate
+if (gameState === "play" && (!bgReady || !fgReady || !jamieReady)) {
+  ctx.fillStyle = "#0b1222";
+  ctx.fillRect(0, 0, viewW, viewH);
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.font = "700 18px system-ui";
+  ctx.textAlign = "center";
+  ctx.fillText("Loading…", viewW / 2, viewH / 2 + 6);
+  ctx.textAlign = "left";
+  return;
+}
+
+// normal rendering begins
 ctx.clearRect(0, 0, viewW, viewH);
+    
 if (gameState === "lose") {
   if (failReady) {
     // Cover scaling: fill screen, crop if needed
@@ -2322,7 +2358,7 @@ let loseAudio = null;
 
 function initLoseAudio(){
   if (loseAudio) return;
-  loseAudio = new Audio("lose_stinger.mp3 + CACHE_BUST");
+  loseAudio = new Audio("lose_stinger.mp3" + CACHE_BUST);
   loseAudio.loop = false; 
   loseAudio.preload = "auto";
   loseAudio.volume = 0.9; // tune
@@ -2547,7 +2583,7 @@ function initFootsteps(){
   if (footstepPool) return;
   // Small pool so rapid steps can overlap slightly without cutting each other off
   footstepPool = Array.from({length: 4}, () => {
-    const a = new Audio("footstep_soft.mp3" + + CACHE_BUST); // put file next to this HTML or adjust path
+    const a = new Audio("footstep_soft.mp3" + CACHE_BUST); // put file next to this HTML or adjust path
     a.preload = "auto";
     a.volume = FOOTSTEP_VOLUME * (0.85 + Math.random() * 0.3);
     return a;
