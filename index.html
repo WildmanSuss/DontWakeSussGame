@@ -62,6 +62,23 @@ position:absolute; inset:0;
       background: linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.24));
     }
     #startScreen .startUI { z-index:2;
+    #startScreen.loading .startUI {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#startScreen.loading::after {
+  content: "Loading…";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(255,255,255,0.85);
+  font: 700 18px system-ui;
+  z-index: 5;
+}
+
+                           
 
       position:relative;
       width:min(760px, calc(100vw - 28px));
@@ -714,7 +731,7 @@ body.endScreen .hud{ display:none !important; }
   <div id="debugToast" class="hidden" aria-hidden="true"></div>
 
   <!-- Start Screen -->
-  <div id="startScreen" class="hidden">
+ <div id="startScreen" class="hidden loading">
     <div class="startBg" id="startBg"></div>
     <div class="startShade"></div>
     <div class="startUI" aria-label="Start Screen">
@@ -779,6 +796,22 @@ body.endScreen .hud{ display:none !important; }
 <script>
   const DEBUG_TOAST = false;
 (() => {
+  const startScreen = document.getElementById("startScreen");
+if (startScreen) startScreen.classList.add("loading");
+
+function preloadImages(srcs, onDone) {
+  let loaded = 0;
+  const total = srcs.length;
+
+  srcs.forEach(src => {
+    const img = new Image();
+    img.onload = img.onerror = () => {
+      loaded++;
+      if (loaded === total) onDone();
+    };
+    img.src = src;
+  });
+}
   const CACHE_BUST = "?v=20260129b"; // change this when you want to force-refresh
   const BACKGROUND_SRC = "bedroom_bg.png" + CACHE_BUST;
   const FOREGROUND_SRC = "bedroom_fg.png" + CACHE_BUST;
@@ -2832,7 +2865,13 @@ if (benjiPill) {
 
   updateObjectiveHint();
   draw();
-  requestAnimationFrame(loop);
+  preloadImages(
+  [BACKGROUND_SRC, FOREGROUND_SRC, JAMIE_SRC],
+  () => {
+    if (startScreen) startScreen.classList.remove("loading");
+    requestAnimationFrame(loop);
+  }
+);
 }
 
 // Startup (must be OUTSIDE loop)
