@@ -1,3 +1,11 @@
+<!-- UI-ONLY LAYOUT PATCH (2026-01-27)
+  Touch + landscape only:
+  - CSS override: #joyZone size -> 80px x 80px (smaller joystick base)
+  - CSS override: #joyStick size -> 28px x 28px (smaller joystick stick; updated centering margins)
+  - CSS override: .hint top -> 54px (moved slightly higher; centered unchanged)
+  Start screen:
+  - Joystick hidden on start screen via existing .uiHidden #joyZone rule (no logic changes)
+-->
 <!doctype html>
 <!-- PATCH NOTES (2026-01-27)
   - Debug toggle: added runtime 'D' key toggle for existing hitbox/boundary debug rendering (keydown handler).
@@ -551,7 +559,7 @@ body.endScreen .hud{ display:none !important; }
    - Hide joystick on start screen (wrap.uiHidden)
    - Move Noise meter into topbar between pills (landscape touch)
    - Center hints under Noise meter (landscape touch)
-   - Push Do Action button further right (closer to edge)
+   - Push Action button further right (closer to edge)
 */
 .uiHidden #joyZone{ display:none !important; }
 
@@ -591,6 +599,71 @@ body.endScreen .hud{ display:none !important; }
     text-align:center;
   }
 }
+
+/* --- UI-only micro tuning (touch + landscape only) ---
+   Smaller joystick + hints slightly higher (no logic changes)
+*/
+@media (pointer: coarse) and (orientation: landscape){
+  #joyZone{ width:80px; height:80px; }
+  #joyStick{ width:28px; height:28px; margin-left:-14px; margin-top:-14px; }
+  .hint{ top:54px !important; }
+}
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 450px){
+  /* Constrain modal to iPhone landscape height */
+  #howToModal .panelCard{
+    max-height: 92vh;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Scrollable content area (image + text) */
+  #howToModal .howToImgWrap{
+    flex: 1 1 auto;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Footer / back button always visible */
+  #howToModal .ctaRow{
+    flex: 0 0 auto;
+    padding-top: 10px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+
+  /* Image sizing */
+  #howToModal img#howToImg{
+    max-height: 62vh;
+  }
+  /* --- iPhone landscape: "Who is Suss" TV modal sizing --- */
+#tvModal .panelCard{
+  max-height: 92vh;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+}
+/* iPhone landscape: keep TV illusion by scaling the whole composite together */
+#tvModal .tvWrap{
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+
+  transform-origin: top center;
+  transform: scale(0.78); /* tweak: 0.72–0.88 */
+}
+
+/* Keep footer/back button visible */
+#tvModal .tvFooter{
+  flex: 0 0 auto;
+  padding-top: 10px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+}
+}
 </style>
   <link rel="icon" href="data:,">
 </head>
@@ -622,7 +695,7 @@ body.endScreen .hud{ display:none !important; }
     </div>
     <div class="panel">
       <div><b>Move:</b> <span class="kbd">Arrows</span> / Touch</div>
-      <div class="small"><b>Interact:</b> <span class="kbd">Space</span> / Do Action • <b>Restart:</b> <span class="kbd">R</span></div>
+      <div class="small"><b>Interact:</b> <span class="kbd">Space</span> / Action • <b>Restart:</b> <span class="kbd">R</span></div>
     </div>
   </div>
   <div class="btns">
@@ -630,7 +703,7 @@ body.endScreen .hud{ display:none !important; }
     <button class="btn" data-m="left">◀</button>
     <button class="btn" data-m="right">▶</button>
     <button class="btn" data-m="down">▼</button>
-    <button class="btn action" id="doBtn">Do Action</button>
+    <button class="btn action" id="doBtn">Action</button>
     <button class="btn util" id="restartBtn">Play Again</button>
   </div>
   <div class="panel hint" id="hint" style="display:none">Loading… Put <b>bedroom_bg.png</b>, <b>bedroom_fg.png</b>, and <b>Jamie.png</b> in the same folder.</div>
@@ -806,16 +879,23 @@ const HINT_COPY = {
     setJoyVisual(dx, dy);
   }
 
-  function isCoarsePointer(){
-    return window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
-  }
+function isCoarsePointer(){
+  return window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+}
+function isIPhoneLandscapeTouch(){
+  return (
+    isCoarsePointer() &&
+    window.matchMedia &&
+    window.matchMedia("(orientation: landscape)").matches &&
+    Math.min(window.innerWidth, window.innerHeight) <= 450
+  );
+}
 
-  function enableJoystickIfNeeded(){
-    if (!joyZoneEl) return;
-    // show/hide handled by CSS, but keep state clean
-    if (!isCoarsePointer()) resetJoy();
-  }
-
+function enableJoystickIfNeeded(){
+  if (!joyZoneEl) return;
+  // show/hide handled by CSS, but keep state clean
+  if (!isCoarsePointer()) resetJoy();
+}
   // Pointer Events (preferred)
   if (joyZoneEl){
     joyZoneEl.addEventListener("pointerdown", (e)=>{
@@ -1688,7 +1768,7 @@ if (DEBUG_UI) {
 }
 
 
-    showHint("Restarted. Night 1.");
+    showHint("Night 1.");
   }
 
 
@@ -1894,11 +1974,27 @@ window.addEventListener('keyup', (e) => { keys[e.key] = false; });
     b.addEventListener('pointercancel', up);
     b.addEventListener('pointerleave', up);
   });
-  doBtn.addEventListener('click', (e)=>{ try{ e.stopPropagation(); }catch(_e){} tryAction(); });
-  doBtn.addEventListener('pointerdown', (e)=>{ e.preventDefault(); e.stopPropagation(); tryAction(); }, {passive:false});
-  doBtn.addEventListener('pointerup', (e)=>{ e.preventDefault(); e.stopPropagation(); tryAction(); }, {passive:false});
-  doBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); tryAction(); }, {passive:false});
-  doBtn.addEventListener('touchend', (e)=>{ e.preventDefault(); e.stopPropagation(); tryAction(); }, {passive:false});
+  doBtn.addEventListener('click', (e)=>{ try{ e.stopPropagation(); }catch(_e){} fireDoActionFromBtn(e); });
+  // Touch/Pointer safety: prevent double-trigger on mobile (click + touch + pointer) while keeping mechanics unchanged.
+  let lastDoActionStamp = 0;
+  function fireDoActionFromBtn(e){
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const type = e && e.type ? e.type : '';
+    if (isCoarsePointer()){
+      // On touch devices, only accept the *press* event and ignore paired/up events.
+      if (type && type !== 'pointerdown' && type !== 'touchstart') return;
+      if (now - lastDoActionStamp < 250) return;
+      lastDoActionStamp = now;
+      tryAction();
+      return;
+    }
+    // Desktop: click is primary. Pointerdown is allowed for non-mouse pointers.
+    if (type === 'click' || type === 'pointerdown'){
+      tryAction();
+    }
+  }
+  doBtn.addEventListener('pointerdown', (e)=>{ e.preventDefault(); e.stopPropagation(); fireDoActionFromBtn(e); }, {passive:false});
+  doBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); fireDoActionFromBtn(e); }, {passive:false});
 
 
   const wrap = document.getElementById("wrap");
@@ -2023,7 +2119,9 @@ if (gameState === "lose") {
     // Cover scaling: fill screen, crop if needed
     const iw = failImg.naturalWidth || 1536;
     const ih = failImg.naturalHeight || 1024;
-    const s = Math.max(viewW / iw, viewH / ih);
+   const s = isIPhoneLandscapeTouch()
+  ? Math.min(viewW / iw, viewH / ih)   // iPhone: contain (no crop)
+  : Math.max(viewW / iw, viewH / ih);  // others: cover (fill)
     const dw = iw * s, dh = ih * s;
     const dx = (viewW - dw) / 2;
     const dy = (viewH - dh) / 2;
@@ -2055,7 +2153,9 @@ if (gameState === "win") {
     // Cover scaling: fill screen, crop if needed
     const iw = winImg.naturalWidth || 1536;
     const ih = winImg.naturalHeight || 1024;
-    const s = Math.max(viewW / iw, viewH / ih);
+    const s = isIPhoneLandscapeTouch()
+  ? Math.min(viewW / iw, viewH / ih)   // iPhone: contain (no crop)
+  : Math.max(viewW / iw, viewH / ih);  // others: cover (fill)
     const dw = iw * s, dh = ih * s;
     const dx = (viewW - dw) / 2;
     const dy = (viewH - dh) / 2;
