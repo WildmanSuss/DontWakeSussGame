@@ -779,9 +779,10 @@ body.endScreen .hud{ display:none !important; }
 <script>
   const DEBUG_TOAST = false;
 (() => {
-  const BACKGROUND_SRC = "bedroom_bg.png";
-  const FOREGROUND_SRC = "bedroom_fg.png";
-  const JAMIE_SRC = "Jamie.png";
+  const CACHE_BUST = "?v=20260129a"; // change this when you want to force-refresh
+  const BACKGROUND_SRC = "bedroom_bg.png" + CACHE_BUST;
+  const FOREGROUND_SRC = "bedroom_fg.png" + CACHE_BUST;
+  const JAMIE_SRC = "Jamie.png" + CACHE_BUST;
   const JAMIE_W = 250;
   const JAMIE_H = 400;
   const JAMIE_FOOT_X = 0.55;
@@ -2259,7 +2260,7 @@ let snorePlaying = false;
 
 function initSnoreAudio(){
   if (snoreAudio) return;
-  snoreAudio = new Audio("snore_loop.mp3");
+  snoreAudio = new Audio("snore_loop.mp3" + CACHE_BUST);
   snoreAudio.loop = true;
   snoreAudio.preload = "auto";
   snoreAudio.volume = SNORE_VOLUME;
@@ -2284,7 +2285,7 @@ let loseAudio = null;
 
 function initLoseAudio(){
   if (loseAudio) return;
-  loseAudio = new Audio("lose_stinger.mp3");
+  loseAudio = new Audio("lose_stinger.mp3 + CACHE_BUST");
   loseAudio.loop = false; 
   loseAudio.preload = "auto";
   loseAudio.volume = 0.9; // tune
@@ -2299,7 +2300,7 @@ let benjiWakePlaying = false;
 
 function initBenjiWakeAudio(){
   if (benjiWakeAudio) return;
-  benjiWakeAudio = new Audio("benji_wake.mp3");
+  benjiWakeAudio = new Audio("benji_wake.mp3" + CACHE_BUST);
   benjiWakeAudio.loop = true;
   benjiWakeAudio.preload = "auto";
   benjiWakeAudio.volume = 0;
@@ -2509,7 +2510,7 @@ function initFootsteps(){
   if (footstepPool) return;
   // Small pool so rapid steps can overlap slightly without cutting each other off
   footstepPool = Array.from({length: 4}, () => {
-    const a = new Audio("footstep_soft.mp3"); // put file next to this HTML or adjust path
+    const a = new Audio("footstep_soft.mp3" + + CACHE_BUST); // put file next to this HTML or adjust path
     a.preload = "auto";
     a.volume = FOOTSTEP_VOLUME * (0.85 + Math.random() * 0.3);
     return a;
