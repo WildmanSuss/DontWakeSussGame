@@ -814,10 +814,12 @@ function preloadImages(srcs, onDone) {
     img.src = src;
   });
 }
-  const CACHE_BUST = "?v=20260129b"; // change this when you want to force-refresh
-  const BACKGROUND_SRC = "bedroom_bg.png" + CACHE_BUST;
-  const FOREGROUND_SRC = "bedroom_fg.png" + CACHE_BUST;
-  const JAMIE_SRC = "Jamie.png" + CACHE_BUST;
+ const CACHE_BUST = "?v=20260129b"; // bump this when you want to force-refresh
+const asset = (p) => p + CACHE_BUST;
+const BACKGROUND_SRC = asset("bedroom_bg.png");
+const FOREGROUND_SRC = asset("bedroom_fg.png");
+const JAMIE_SRC      = asset("Jamie.png");
+const START_SCREEN_BG_SRC = asset("start_screen.png");
   const JAMIE_W = 250;
   const JAMIE_H = 400;
   const JAMIE_FOOT_X = 0.55;
