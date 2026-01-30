@@ -1341,10 +1341,12 @@ function isGameplayUIActive(){
   startBtnEl.addEventListener("click", (e) => { try{ e.preventDefault(); e.stopPropagation(); }catch(_e){}
     playUiClick();
     try{
-      setUiScreen("play"); setUiOverlay(null);
+      setUiOverlay(null);
+      setUiScreen("play"); 
       gameState = "play";
       // Ensure a clean baseline and start Night 1 fresh
       if (typeof reset === 'function') reset();
+      console.log("START CLICK:", { uiScreen, uiOverlay, gameState });
   updateRotateGate();
       // Start audio from gesture, if possible
       if (typeof startSnore === 'function') startSnore();
