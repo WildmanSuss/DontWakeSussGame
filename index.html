@@ -1277,8 +1277,6 @@ function setUiScreen(next){
   uiScreen = next;
   renderUI();
 
-  // IMPORTANT: when switching to play, the canvas may just have become visible.
-  // Defer resize until after layout so getBoundingClientRect() returns real dims.
   if (next === "play") {
     const kick = () => { try { if (typeof resize === "function") resize(); } catch(e){} };
     setTimeout(kick, 0);
@@ -1291,10 +1289,9 @@ function setUiOverlay(next){
   renderUI();
 }
 
-  function isGameplayUIActive(){
-    return (uiScreen === "play") && (uiOverlay === null);
-  }
-
+function isGameplayUIActive(){
+  return (uiScreen === "play") && (uiOverlay === null);
+}
   function openInstructions(){
     playUiClick();
     // Prevent backdrop click from immediately closing after opening
