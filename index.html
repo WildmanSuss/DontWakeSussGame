@@ -1120,6 +1120,7 @@ if (startBtnEl) startBtnEl.disabled = true;
   // "Active play" = play screen, no modal overlay, not rotation-gated
   return uiScreen === "play" && uiOverlay == null && !rotateGateActive;
 }
+  window.isGameplayUIActive = isGameplayUIActive; // <— add this for debugging
 
 
   // Optional click sound (best-effort)
