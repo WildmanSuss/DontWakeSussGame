@@ -1279,10 +1279,16 @@ function setUiScreen(next){
 
   // IMPORTANT: when switching to play, the canvas may just have become visible.
   // Defer resize until after layout so getBoundingClientRect() returns real dims.
-if (next === "play") {
-  const kick = () => { try { if (typeof resize === "function") resize(); } catch(e){} };
-  setTimeout(kick, 0);
-  requestAnimationFrame(kick);
+  if (next === "play") {
+    const kick = () => { try { if (typeof resize === "function") resize(); } catch(e){} };
+    setTimeout(kick, 0);
+    requestAnimationFrame(kick);
+  }
+}
+
+function setUiOverlay(next){
+  uiOverlay = next;
+  renderUI();
 }
 }
 
