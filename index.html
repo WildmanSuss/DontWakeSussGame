@@ -1115,6 +1115,12 @@ if (startBtnEl) startBtnEl.disabled = true;
   let uiScreen = "start";
   let uiOverlay = null;
   let justOpenedModal = false;
+  
+  function isGameplayUIActive(){
+  // "Active play" = play screen, no modal overlay, not rotation-gated
+  return uiScreen === "play" && uiOverlay == null && !rotateGateActive;
+}
+
 
   // Optional click sound (best-effort)
   let uiClick = null;
