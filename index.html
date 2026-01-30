@@ -2760,7 +2760,7 @@ if (moment && momentPhase === "fadeOut") {
   }
 }
 
-if(gameState === "play" && isGameplayUIActive()){
+if (gameState === "play" && (typeof isGameplayUIActive !== "function" || isGameplayUIActive())) {
   
 // --- Benji delayed appearance (Night 3) ---
   if (gameState === "play" && night === 3 && !moment && benjiPending && benjiAppearAt > 0 && performance.now() >= benjiAppearAt) {
