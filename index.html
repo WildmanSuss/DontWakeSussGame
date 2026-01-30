@@ -1338,25 +1338,40 @@ function isGameplayUIActive(){
   }
 
   // Wire UI events
-  startBtnEl.addEventListener("click", (e) => { try{ e.preventDefault(); e.stopPropagation(); }catch(_e){}
-    playUiClick();
-    try{
-      setUiOverlay(null);
-      setUiScreen("play"); 
+startBtnEl.addEventListener("click", (e) => {
+  try { e.preventDefault(); e.stopPropagation(); } catch(_e) {}
+
+  playUiClick();
+
+  try {
+    setUiOverlay(null);
+    setUiScreen("play");
+
+    // Engine state must transition too (separate concept from UI state)
+    if (typeof reset === "function") {
+      reset();
+    } else {
       gameState = "play";
-      // Ensure a clean baseline and start Night 1 fresh
-      if (typeof reset === 'function') reset();
-      console.log("START CLICK:", { uiScreen, uiOverlay, gameState });
-  updateRotateGate();
-      // Start audio from gesture, if possible
-      if (typeof startSnore === 'function') startSnore();
-    } catch(err){
-      console.error('START failed:', err);
-      // fall back: keep start screen so user isn't stuck in a broken state
-      setUiOverlay(null);
-      gameState = "start";
     }
-  });
+
+    // Ensure the RAF loop is alive (no-op if already running)
+    if (window.__DWSDebug) window.__DWSDebug.lastStartClickMs = performance.now();
+    if (typeof armGameLoop === "function") armGameLoop("start_click");
+
+    // Force one draw immediately so you can confirm world rendering
+    if (typeof draw === "function") draw();
+
+    // Keep existing behavior (guarded)
+    if (typeof updateRotateGate === "function") updateRotateGate();
+    if (typeof startSnore === "function") startSnore();
+
+  } catch (err) {
+    console.error("START failed:", err);
+    try { setUiOverlay(null); } catch(_e) {}
+    try { setUiScreen("start"); } catch(_e) {}
+    try { gameState = "start"; } catch(_e) {}
+  }
+});
 
   howToBtnEl.addEventListener("click", (e) => { try{ e.preventDefault(); e.stopPropagation(); }catch(_e){} openInstructions(); });
   if (howToCloseEl) howToCloseEl.addEventListener("click", closeInstructions);
@@ -2705,7 +2720,46 @@ function dismissMoment(){
 }
 
 let last = performance.now();
+
+  // =====================
+// Engine loop control
+// =====================
+const DEBUG_LOOP = false;
+
+window.__DWSDebug = window.__DWSDebug || {
+  loopTicks: 0,
+  lastLoopMs: 0,
+  loopAlive: false,
+  lastStartClickMs: 0,
+  lastArmReason: "",
+};
+
+let __rafScheduled = false;
+
+function armGameLoop(reason){
+  // If loop is already running, do nothing
+  if (window.__DWSDebug.loopAlive) return;
+
+  // If a RAF is already queued, do nothing
+  if (__rafScheduled) return;
+
+  __rafScheduled = true;
+  window.__DWSDebug.lastArmReason = reason || "";
+
+  if (DEBUG_LOOP) console.log("[DWS] armGameLoop:", reason);
+
+  if (typeof loop === "function") {
+    requestAnimationFrame(loop);
+  } else {
+    console.warn("[DWS] loop() not defined when arming game loop");
+  }
+  }
+
 function loop(t){
+  __rafScheduled = false;
+window.__DWSDebug.loopAlive = true;
+window.__DWSDebug.loopTicks++;
+window.__DWSDebug.lastLoopMs = t;
   const dt = Math.min(0.033, (t - last) / 1000);
   last = t;
   // DEBUG: log state changes (temporary)
